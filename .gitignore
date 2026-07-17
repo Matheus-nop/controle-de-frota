@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.env
+.env.local
+.env*.local
+.vercel
+.DS_Store
+*.log
+
+# config local do Claude Code (por maquina, nao compartilhar)
+.claude/settings.local.json
+
+# a planilha de origem tem nome de tecnico e historico interno.
+# migre e apague - nao versione.
+dados-origem/*.xlsx
