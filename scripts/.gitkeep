@@ -1,0 +1,3 @@
+# Mantem a pasta scripts/ no versionamento.
+# O guia (docs/guia-claude-code-frota.md, Fase 1) cria aqui o scripts/migrar.ts;
+# sem este arquivo, o Git nao versiona a pasta vazia e ela some ao clonar.
