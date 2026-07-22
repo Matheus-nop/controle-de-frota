@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+/* O painel (components/painel/PainelFrota.jsx) injeta o proprio CSS via <style>
+   e define o fundo em .app. Aqui ficam so os padroes globais e a tela de login. */
+
+:root {
+  --background: #f4f6f9;
+  --foreground: #101a26;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
