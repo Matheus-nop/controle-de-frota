@@ -23,7 +23,7 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 
 ## Estado
 - [x] Fase 1 — schema e migração
-- [ ] Fase 2 — auth e RLS
+- [x] Fase 2 — auth e RLS
 - [ ] Fase 3 — painel
 - [ ] Fase 4 — PWA de campo
 - [ ] Fase 5 — automações
