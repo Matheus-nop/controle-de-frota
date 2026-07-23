@@ -124,7 +124,7 @@ export default function PainelFrota({ dados, referencia }) {
         {aba === "frota" && <Frota m={m} onSel={setSel} />}
         {aba === "manut" && <Manut m={m} />}
         {aba === "custos" && <Custos m={m} />}
-        {aba === "dados" && <Pendencias m={m} />}
+             {aba === "dados" && <Pendencias m={m} REF={REF} />}
       </main>
 
       {sel && <Ficha placa={sel} m={m} onClose={() => setSel(null)} />}
@@ -357,7 +357,7 @@ function Custos({ m }) {
 }
 
 /* ---------- PENDÊNCIAS / QUALIDADE ---------- */
-function Pendencias({ m }) {
+function Pendencias({ m, REF }) {
   return (
     <>
       <p className="nota nota-topo">
