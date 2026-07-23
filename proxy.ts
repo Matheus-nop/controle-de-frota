@@ -1,13 +1,14 @@
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-export async function middleware(request: NextRequest) {
+// Next.js 16: "proxy" substitui o antigo "middleware". Roda no runtime Node
+// (nao no Edge), entao o cliente Supabase (@supabase/ssr) funciona aqui.
+export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }
 
 export const config = {
   matcher: [
-    // Tudo, exceto assets estaticos e arquivos de imagem.
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
