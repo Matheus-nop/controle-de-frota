@@ -28,6 +28,7 @@ export default function RegistrarChegadaPage() {
   const [obs, setObs] = useState("");
   const [pendencia, setPendencia] = useState(false);
   const [descPend, setDescPend] = useState("");
+  const [foto, setFoto] = useState<FileList | null>(null);
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export default function RegistrarChegadaPage() {
 
   async function carregar() {
     const supabase = createClient();
-    await supabase.auth.getUser();  
+    await supabase.auth.getUser();
     const [r, t] = await Promise.all([
       supabase
         .from("roteiros")
@@ -89,6 +90,23 @@ export default function RegistrarChegadaPage() {
 
     setSalvando(true);
     const supabase = createClient();
+
+    let fotoUrl: string | null = null;
+    try {
+      if (foto && foto.length > 0) {
+        const f = foto[0];
+        const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `${sel.id}/chegada-${Date.now()}.${ext}`;
+        const up = await supabase.storage.from("roteiros").upload(path, f);
+        if (up.error) throw up.error;
+        fotoUrl = supabase.storage.from("roteiros").getPublicUrl(path).data.publicUrl;
+      }
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Erro ao enviar a foto.");
+      setSalvando(false);
+      return;
+    }
+
     const { error } = await supabase
       .from("roteiros")
       .update({
@@ -98,6 +116,7 @@ export default function RegistrarChegadaPage() {
         obs_chegada: obs.trim() || null,
         houve_pendencia: pendencia,
         descricao_pendencias: pendencia ? descPend.trim() || null : null,
+        foto_painel_chegada: fotoUrl,
       })
       .eq("id", sel.id);
 
@@ -135,20 +154,8 @@ export default function RegistrarChegadaPage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#F4F6F9", padding: 20 }}>
-      <div
-        style={{
-          maxWidth: 460,
-          margin: "0 auto",
-          background: "#fff",
-          border: "1px solid #E3E9F0",
-          borderRadius: 14,
-          padding: 24,
-          boxShadow: "0 8px 30px rgba(16,26,38,.06)",
-        }}
-      >
-        <a href="/" style={{ fontSize: 13, color: "#1F6FEB", textDecoration: "none" }}>
-          ← Voltar ao painel
-        </a>
+      <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "1px solid #E3E9F0", borderRadius: 14, padding: 24, boxShadow: "0 8px 30px rgba(16,26,38,.06)" }}>
+        <a href="/" style={{ fontSize: 13, color: "#1F6FEB", textDecoration: "none" }}>← Voltar ao painel</a>
         <h1 style={{ margin: "10px 0 2px", fontSize: 22 }}>Registrar chegada</h1>
         <p style={{ color: "#6B7A8D", fontSize: 14, marginBottom: 20 }}>
           Fecha um roteiro que está na rua.
@@ -156,16 +163,7 @@ export default function RegistrarChegadaPage() {
 
         {ok ? (
           <div>
-            <div
-              style={{
-                background: "#E7F3EE",
-                color: "#1B7A4B",
-                borderRadius: 10,
-                padding: 16,
-                fontSize: 14,
-                marginBottom: 16,
-              }}
-            >
+            <div style={{ background: "#E7F3EE", color: "#1B7A4B", borderRadius: 10, padding: 16, fontSize: 14, marginBottom: 16 }}>
               Chegada registrada! Roteiro fechado.
             </div>
             <button
@@ -176,37 +174,15 @@ export default function RegistrarChegadaPage() {
                 setObs("");
                 setPendencia(false);
                 setDescPend("");
+                setFoto(null);
                 setCarregando(true);
                 carregar();
               }}
-              style={{
-                width: "100%",
-                padding: "11px",
-                borderRadius: 8,
-                border: "1px solid #CBD5E1",
-                background: "#fff",
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: "pointer",
-                marginBottom: 10,
-              }}
+              style={{ width: "100%", padding: "11px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 10 }}
             >
               Registrar outra chegada
             </button>
-            <a
-              href="/"
-              style={{
-                display: "block",
-                textAlign: "center",
-                padding: "11px",
-                borderRadius: 8,
-                background: "#1F6FEB",
-                color: "#fff",
-                fontSize: 14,
-                fontWeight: 600,
-                textDecoration: "none",
-              }}
-            >
+            <a href="/" style={{ display: "block", textAlign: "center", padding: "11px", borderRadius: 8, background: "#1F6FEB", color: "#fff", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
               Ir para o painel
             </a>
           </div>
@@ -218,16 +194,8 @@ export default function RegistrarChegadaPage() {
           </p>
         ) : (
           <form onSubmit={salvar}>
-            <label htmlFor="roteiro" style={labelStyle}>
-              Roteiro aberto
-            </label>
-            <select
-              id="roteiro"
-              required
-              value={roteiroId}
-              onChange={(e) => selecionar(e.target.value)}
-              style={inputStyle}
-            >
+            <label htmlFor="roteiro" style={labelStyle}>Roteiro aberto</label>
+            <select id="roteiro" required value={roteiroId} onChange={(e) => selecionar(e.target.value)} style={inputStyle}>
               <option value="">Selecione…</option>
               {abertos.map((r) => {
                 const v = one(r.veiculo);
@@ -242,89 +210,35 @@ export default function RegistrarChegadaPage() {
 
             {sel && (
               <>
-                <label htmlFor="km" style={labelStyle}>
-                  Km de chegada (saída: {sel.km_saida})
-                </label>
-                <input
-                  id="km"
-                  type="number"
-                  inputMode="numeric"
-                  required
-                  value={km}
-                  onChange={(e) => setKm(e.target.value)}
-                  placeholder="ex.: 66655"
-                  style={inputStyle}
-                />
+                <label htmlFor="km" style={labelStyle}>Km de chegada (saída: {sel.km_saida})</label>
+                <input id="km" type="number" inputMode="numeric" required value={km} onChange={(e) => setKm(e.target.value)} placeholder="ex.: 66655" style={inputStyle} />
 
-                <label htmlFor="tecc" style={labelStyle}>
-                  Técnico na chegada
-                </label>
-                <select
-                  id="tecc"
-                  value={tecnicoChegadaId}
-                  onChange={(e) => setTecnicoChegadaId(e.target.value)}
-                  style={inputStyle}
-                >
-                  {tecnicos.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nome}
-                    </option>
-                  ))}
+                <label htmlFor="tecc" style={labelStyle}>Técnico na chegada</label>
+                <select id="tecc" value={tecnicoChegadaId} onChange={(e) => setTecnicoChegadaId(e.target.value)} style={inputStyle}>
+                  {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
                 </select>
 
                 <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <input
-                    type="checkbox"
-                    checked={pendencia}
-                    onChange={(e) => setPendencia(e.target.checked)}
-                  />
+                  <input type="checkbox" checked={pendencia} onChange={(e) => setPendencia(e.target.checked)} />
                   Houve pendência no roteiro
                 </label>
                 {pendencia && (
-                  <input
-                    type="text"
-                    value={descPend}
-                    onChange={(e) => setDescPend(e.target.value)}
-                    placeholder="descreva a pendência"
-                    style={inputStyle}
-                  />
+                  <input type="text" value={descPend} onChange={(e) => setDescPend(e.target.value)} placeholder="descreva a pendência" style={inputStyle} />
                 )}
 
-                <label htmlFor="obs" style={labelStyle}>
-                  Observação (opcional)
-                </label>
-                <input
-                  id="obs"
-                  type="text"
-                  value={obs}
-                  onChange={(e) => setObs(e.target.value)}
-                  placeholder="algo a registrar na chegada"
-                  style={inputStyle}
-                />
+                <label htmlFor="obs" style={labelStyle}>Observação (opcional)</label>
+                <input id="obs" type="text" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="algo a registrar na chegada" style={inputStyle} />
+
+                <label htmlFor="foto" style={labelStyle}>Foto do painel / hodômetro (opcional)</label>
+                <input id="foto" type="file" accept="image/*" onChange={(e) => setFoto(e.target.files)} style={{ ...inputStyle, padding: 8 }} />
               </>
             )}
 
-            <button
-              type="submit"
-              disabled={salvando || !sel}
-              style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: 8,
-                border: "none",
-                background: salvando || !sel ? "#7CA0C9" : "#1F6FEB",
-                color: "#fff",
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: salvando || !sel ? "default" : "pointer",
-              }}
-            >
+            <button type="submit" disabled={salvando || !sel} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: salvando || !sel ? "#7CA0C9" : "#1F6FEB", color: "#fff", fontSize: 15, fontWeight: 600, cursor: salvando || !sel ? "default" : "pointer" }}>
               {salvando ? "Registrando…" : "Registrar chegada"}
             </button>
 
-            {erro && (
-              <div style={{ color: "#C0392B", fontSize: 13, marginTop: 12 }}>{erro}</div>
-            )}
+            {erro && <div style={{ color: "#C0392B", fontSize: 13, marginTop: 12 }}>{erro}</div>}
           </form>
         )}
       </div>
