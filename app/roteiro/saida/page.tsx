@@ -23,6 +23,7 @@ export default function RegistrarSaidaPage() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
+      await supabase.auth.getUser();
       const [v, t] = await Promise.all([
         supabase
           .from("veiculos")
