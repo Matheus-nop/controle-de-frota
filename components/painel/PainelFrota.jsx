@@ -61,6 +61,7 @@ export default function PainelFrota({ dados, referencia }) {
     const concluidos = roteiros.filter((r) => (r.st || "").startsWith("CONCLUÍDO"));
 
     const ativos = veiculos.filter((v) => v.status === "ATIVO");
+        const bloqueados = veiculos.filter((v) => v.status === "BLOQUEADO");
     const frota = ativos.map((v) => {
       const falta = v.revisao != null && v.km != null ? v.revisao - v.km : null;
       const situacao =
@@ -79,7 +80,7 @@ export default function PainelFrota({ dados, referencia }) {
     return {
       veiculos, roteiros, manutencoes, checklists, porPlaca,
       naRua, semFechamento, chegadaSemSaida, kmSuspeito,
-      kmMes, custoMes, concluidos, ativos, frota, gastoManut, bloqueios,
+           kmMes, custoMes, concluidos, ativos, frota, gastoManut, bloqueios, bloqueados,
       custos: [...custos].sort((a, b) => b.total - a.total),
     };
   }, []);
@@ -141,6 +142,20 @@ export default function PainelFrota({ dados, referencia }) {
 function Hoje({ m, onSel }) {
   return (
     <>
+            {m.bloqueados.length > 0 && (
+        <section style={{ background: "#FBE9E9", border: "1px solid #F3C9C9", borderRadius: 12, padding: "12px 14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <strong style={{ color: "#C0392B", fontSize: 14 }}>Veículos bloqueados</strong>
+            <span style={{ background: "#C0392B", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 20, padding: "1px 8px" }}>{m.bloqueados.length}</span>
+          </div>
+          {m.bloqueados.map((v, i) => (
+            <div key={i} onClick={() => onSel(v.placa)} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", cursor: "pointer", fontSize: 13 }}>
+              <Placa placa={v.placa} mini />
+              <span className="mute-xs">{v.modelo}</span>
+            </div>
+          ))}
+        </section>
+      )}
       <section className="hero">
         <div className="hero-head">
           <h2>Na rua agora</h2>
