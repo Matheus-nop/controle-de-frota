@@ -112,6 +112,7 @@ export default function PainelFrota({ dados, referencia }) {
                 <div style={{ display: "flex", gap: 8, padding: "0 18px 12px", maxWidth: 1080, margin: "0 auto" }}>
           <a href="/roteiro/saida" style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 8, background: "#1F6FEB", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>+ Registrar saída</a>
           <a href="/roteiro/chegada" style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 8, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.35)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Registrar chegada</a>
+                            <a href="/checklist" style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 8, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.35)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Checklist</a>
         </div>
         <nav className="tabs">
           {abas.map(([k, label]) => (
