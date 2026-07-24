@@ -61,6 +61,7 @@ export default function ChecklistPage() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
+      await supabase.auth.getUser();
       const [v, t] = await Promise.all([
         supabase.from("veiculos").select("id, placa, modelo").eq("status", "ATIVO").order("placa"),
         supabase.from("tecnicos").select("id, nome").eq("ativo", true).order("nome"),
