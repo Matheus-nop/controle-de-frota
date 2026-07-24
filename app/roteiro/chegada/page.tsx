@@ -35,6 +35,7 @@ export default function RegistrarChegadaPage() {
 
   async function carregar() {
     const supabase = createClient();
+    await supabase.auth.getUser();  
     const [r, t] = await Promise.all([
       supabase
         .from("roteiros")
