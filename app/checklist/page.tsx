@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type Veiculo = { id: string; placa: string; modelo: string };
+type Veiculo = { id: string; placa: string; modelo: string; status: string };
 type Tecnico = { id: string; nome: string };
 
 const ITENS_RAPIDO: [string, string][] = [
@@ -63,7 +63,7 @@ export default function ChecklistPage() {
       const supabase = createClient();
       await supabase.auth.getUser();
       const [v, t] = await Promise.all([
-        supabase.from("veiculos").select("id, placa, modelo").eq("status", "ATIVO").order("placa"),
+        supabase.from("veiculos").select("id, placa, modelo, status").in("status", ["ATIVO", "BLOQUEADO"]).order("placa"),
         supabase.from("tecnicos").select("id, nome").eq("ativo", true).order("nome"),
       ]);
       setVeiculos((v.data as Veiculo[]) ?? []);
@@ -213,7 +213,7 @@ export default function ChecklistPage() {
             <label style={label}>Modelo e placa do veículo</label>
             <select required value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)} style={input}>
               <option value="">Selecione…</option>
-              {veiculos.map((v) => <option key={v.id} value={v.id}>{v.modelo} — {v.placa}</option>)}
+                            {veiculos.map((v) => <option key={v.id} value={v.id}>{v.modelo} — {v.placa}{v.status === "BLOQUEADO" ? " 🔴 (bloqueado)" : ""}</option>)}
             </select>
 
             <label style={label}>Km atual</label>
