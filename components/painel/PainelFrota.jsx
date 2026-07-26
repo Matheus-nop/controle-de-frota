@@ -1,37 +1,34 @@
 "use client";
 import React, { useState, useMemo } from "react";
 
-
-
-/* ---------- utilidades ---------- */
-
+/* ============================ utilidades ============================ */
 const nf = new Intl.NumberFormat("pt-BR");
-const brl = (n) =>
-  n == null ? "—" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const brl = (n) => (n == null ? "—" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 const km = (n) => (n == null ? "—" : nf.format(Math.round(n)) + " km");
 const dataBR = (s) => (s ? s.slice(8, 10) + "/" + s.slice(5, 7) : "—");
-const diasEntre = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
-const JANELA_REVISAO = 10000; // km de antecedência usados na barra de revisão
-
-function Placa({ placa, mini }) {
+function VehIcon() {
   return (
-    <div className={mini ? "plate plate-mini" : "plate"}>
-      <div className="plate-band">
-        <span className="plate-br" />
-        <span className="plate-pais">BRASIL</span>
-        <span className="plate-uf">BR</span>
-      </div>
-      <div className="plate-num">{placa}</div>
-    </div>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <path fill="currentColor" d="M2 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1h3.4a1 1 0 0 1 .82.43l2.6 3.7a1 1 0 0 1 .18.57V15a1 1 0 0 1-1 1h-1.1a2.4 2.4 0 0 1-4.8 0H8.9a2.4 2.4 0 0 1-4.8 0H3a1 1 0 0 1-1-1V7Zm12 2v2.5h4.3L16.6 9H14Z" />
+      <circle cx="6.6" cy="16" r="1.5" fill="currentColor" />
+      <circle cx="16.4" cy="16" r="1.5" fill="currentColor" />
+    </svg>
   );
 }
+function Thumb() {
+  return <span className="thumb"><VehIcon /></span>;
+}
+function Plate({ p }) {
+  return <span className="plate">{p}</span>;
+}
 
-/* ---------- app ---------- */
+/* ============================ componente ============================ */
 export default function PainelFrota({ dados, referencia }) {
   const DADOS = dados;
   const REF = referencia;
-  const [aba, setAba] = useState("hoje");
+  const [view, setView] = useState("operacao");
   const [sel, setSel] = useState(null);
 
   const m = useMemo(() => {
@@ -42,95 +39,119 @@ export default function PainelFrota({ dados, referencia }) {
     const naRua = roteiros
       .filter((r) => r.st === "PENDENTE DE CHEGADA" && r.ds === REF)
       .sort((a, b) => (a.hs || "").localeCompare(b.hs || ""));
-
     const semFechamento = roteiros
       .filter((r) => r.st === "PENDENTE DE CHEGADA" && r.ds < REF)
-      .sort((a, b) => b.ds.localeCompare(a.ds));
-
+      .sort((a, b) => (b.ds || "").localeCompare(a.ds || ""));
     const chegadaSemSaida = roteiros.filter((r) => r.st === "CHEGADA SEM SAÍDA");
     const kmSuspeito = roteiros
       .filter((r) => r.st === "CONCLUÍDO - KM ALTO VERIFICAR")
-      .sort((a, b) => b.kmr - a.kmr);
+      .sort((a, b) => (b.kmr || 0) - (a.kmr || 0));
+
+    const concluidos = roteiros.filter((r) => (r.st || "").startsWith("CONCLUÍDO"));
+    const concluidosHoje = concluidos.filter((r) => r.dc === REF || (r.dc == null && r.ds === REF));
 
     const doMes = roteiros.filter((r) => r.ds && r.ds.startsWith(mesRef) && r.kmr);
     const kmMes = doMes.reduce((s, r) => s + r.kmr, 0);
-    const custoMes = doMes.reduce(
-      (s, r) => s + r.kmr * (porPlaca[r.placa]?.custoKm || 0),
-      0
-    );
-    const concluidos = roteiros.filter((r) => (r.st || "").startsWith("CONCLUÍDO"));
+    const custoMes = doMes.reduce((s, r) => s + r.kmr * (porPlaca[r.placa]?.custoKm || 0), 0);
 
     const ativos = veiculos.filter((v) => v.status === "ATIVO");
-        const bloqueados = veiculos.filter((v) => v.status === "BLOQUEADO");
+    const bloqueados = veiculos.filter((v) => v.status === "BLOQUEADO");
+
     const frota = ativos.map((v) => {
       const falta = v.revisao != null && v.km != null ? v.revisao - v.km : null;
-      const situacao =
-        falta == null ? "sem" : falta <= 0 ? "vencida" : falta <= 2000 ? "proxima" : "ok";
-      const ultimo = roteiros
-        .filter((r) => r.placa === v.placa && r.ds)
-        .sort((a, b) => b.ds.localeCompare(a.ds))[0];
+      const situacao = falta == null ? "sem" : falta <= 0 ? "vencida" : falta <= 2000 ? "proxima" : "ok";
+      const ultimo = roteiros.filter((r) => r.placa === v.placa && r.ds).sort((a, b) => b.ds.localeCompare(a.ds))[0];
       return { ...v, falta, situacao, ultimoUso: ultimo?.ds, naRua: naRua.some((r) => r.placa === v.placa) };
+    });
+    const revisoesVencidas = frota.filter((v) => v.situacao === "vencida").length;
+
+    // pendências unificadas para o kanban
+    const pend = [
+      ...semFechamento.map((r) => ({ r, tag: "sem fechamento" })),
+      ...chegadaSemSaida.map((r) => ({ r, tag: "chegada sem saída" })),
+      ...kmSuspeito.map((r) => ({ r, tag: "km alto" })),
+    ];
+
+    // info de bloqueio: último checklist com motivo por placa
+    const bloqInfo = bloqueados.map((v) => {
+      const c = checklists
+        .filter((c) => c.placa === v.placa && c.motivo)
+        .sort((a, b) => (b.data || "").localeCompare(a.data || ""))[0];
+      return { v, motivo: c?.motivo, urg: c?.urg, data: c?.data, cond: c?.cond };
     });
 
     const gastoManut = manutencoes.reduce((s, x) => s + (x.valor || 0), 0);
-    const bloqueios = checklists
-      .filter((c) => c.motivo)
-      .sort((a, b) => (b.data || "").localeCompare(a.data || ""));
 
     return {
       veiculos, roteiros, manutencoes, checklists, porPlaca,
-      naRua, semFechamento, chegadaSemSaida, kmSuspeito,
-           kmMes, custoMes, concluidos, ativos, frota, gastoManut, bloqueios, bloqueados,
-      custos: [...custos].sort((a, b) => b.total - a.total),
+      naRua, concluidosHoje, concluidos, pend, bloqueados, bloqInfo,
+      kmMes, custoMes, ativos, frota, revisoesVencidas, gastoManut,
+      custos: [...custos].sort((a, b) => (b.total || 0) - (a.total || 0)),
     };
   }, []);
 
-  const abas = [
-    ["hoje", "Hoje"],
-    ["frota", "Frota"],
-    ["manut", "Manutenção"],
-    ["custos", "Custos"],
-    ["dados", "Pendências"],
-  ];
+  const totalPend = m.pend.length;
+  const d = new Date(REF + "T12:00:00");
+  const dataTopo = `${dataBR(REF)}/${d.getFullYear()}`;
 
-  const totalPend = m.semFechamento.length + m.chegadaSemSaida.length + m.kmSuspeito.length;
+  const abas = [
+    ["operacao", "Operação"],
+    ["frota", "Frota"],
+    ["custos", "Custos"],
+    ["manut", "Manutenções"],
+    ["relatorios", "Relatórios"],
+  ];
 
   return (
     <div className="app">
       <style>{CSS}</style>
 
-      <header className="top">
-        <div className="top-in">
-          <div>
-            <div className="eyebrow">Controle de frota</div>
-            <h1>Painel</h1>
+      <header className="topbar">
+        <div className="topbar-in">
+          <div className="brand">
+            <div className="logo">
+              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="#B9C4D2" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.74 8.87a.5.5 0 0 0 .12.61l2.03 1.58c-.05.31-.07.63-.07.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52 0 .66-.22l1.92-3.32a.5.5 0 0 0-.12-.61l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z" /></svg>
+            </div>
+            <div className="brand-txt">
+              <div className="eyebrow">Grupo Nova Opção</div>
+              <h1>Controle de Frota</h1>
+            </div>
           </div>
+          <div className="spacer" />
           <div className="top-meta">
-            <div className="mono">{dataBR(REF)}/2026</div>
-            <div className="mute-xs">{m.ativos.length} veículos ativos</div>
+            <div className="d mono">{dataTopo}</div>
+            <div className="s">{m.ativos.length} veículos ativos</div>
           </div>
+          <form action="/auth/signout" method="post">
+            <button className="sair" type="submit">Sair</button>
+          </form>
         </div>
-                <div style={{ display: "flex", gap: 8, padding: "0 18px 12px", maxWidth: 1080, margin: "0 auto" }}>
-          <a href="/roteiro/saida" style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 8, background: "#1F6FEB", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>+ Registrar saída</a>
-          <a href="/roteiro/chegada" style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 8, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.35)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Registrar chegada</a>
-                            <a href="/checklist" style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 8, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.35)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Checklist</a>
-        </div>
-        <nav className="tabs">
-          {abas.map(([k, label]) => (
-            <button key={k} onClick={() => setAba(k)} className={aba === k ? "tab on" : "tab"}>
-              {label}
-              {k === "dados" && totalPend > 0 && <span className="dot">{totalPend}</span>}
-            </button>
-          ))}
-        </nav>
       </header>
 
+      <nav className="subnav">
+        <div className="subnav-in">
+          {abas.map(([k, label]) => (
+            <button key={k} onClick={() => setView(k)} className={view === k ? "navtab on" : "navtab"}>
+              {label}
+              {k === "operacao" && totalPend > 0 && <span className="dotn">{totalPend}</span>}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       <main className="wrap">
-        {aba === "hoje" && <Hoje m={m} onSel={setSel} />}
-        {aba === "frota" && <Frota m={m} onSel={setSel} />}
-        {aba === "manut" && <Manut m={m} />}
-        {aba === "custos" && <Custos m={m} />}
-             {aba === "dados" && <Pendencias m={m} REF={REF} />}
+        <div className="actions">
+          <a className="btn primary" href="/roteiro/saida">+ Registrar saída</a>
+          <a className="btn" href="/roteiro/chegada">Registrar chegada</a>
+          <a className="btn" href="/checklist">Checklist</a>
+          <a className="btn rel" onClick={() => setView("relatorios")}>↧ Relatórios</a>
+        </div>
+
+        {view === "operacao" && <Operacao m={m} onSel={setSel} referencia={REF} />}
+        {view === "frota" && <Frota m={m} onSel={setSel} />}
+        {view === "custos" && <Custos m={m} />}
+        {view === "manut" && <Manut m={m} />}
+        {view === "relatorios" && <Relatorios m={m} referencia={REF} />}
       </main>
 
       {sel && <Ficha placa={sel} m={m} onClose={() => setSel(null)} />}
@@ -138,524 +159,370 @@ export default function PainelFrota({ dados, referencia }) {
   );
 }
 
-/* ---------- HOJE ---------- */
-function Hoje({ m, onSel }) {
-  return (
-    <>
-            {m.bloqueados.length > 0 && (
-        <section style={{ background: "#FBE9E9", border: "1px solid #F3C9C9", borderRadius: 12, padding: "12px 14px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <strong style={{ color: "#C0392B", fontSize: 14 }}>Veículos bloqueados</strong>
-            <span style={{ background: "#C0392B", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 20, padding: "1px 8px" }}>{m.bloqueados.length}</span>
-          </div>
-          {m.bloqueados.map((v, i) => (
-            <div key={i} onClick={() => onSel(v.placa)} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", cursor: "pointer", fontSize: 13 }}>
-              <Placa placa={v.placa} mini />
-              <span className="mute-xs">{v.modelo}</span>
-            </div>
-          ))}
-        </section>
-      )}
-      <section className="hero">
-        <div className="hero-head">
-          <h2>Na rua agora</h2>
-          <span className="count mono">{m.naRua.length}</span>
-        </div>
-        {m.naRua.length === 0 ? (
-          <p className="vazio">Nenhum veículo com saída em aberto hoje.</p>
-        ) : (
-          <ul className="rua">
-            {m.naRua.map((r, i) => (
-              <li key={i} className="rua-item" onClick={() => onSel(r.placa)}>
-                <Placa placa={r.placa} mini />
-                <div className="rua-mid">
-                  <div className="rua-veic">{r.veic.split(" - ")[0]}</div>
-                  <div className="mute-xs">{r.tec || "sem técnico informado"}</div>
-                </div>
-                <div className="rua-right">
-                  <div className="mono forte">{r.hs || "—"}</div>
-                  <div className="mute-xs mono">{km(r.kms)}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <div className="kpis">
-        <Kpi label="Km no mês" valor={nf.format(m.kmMes)} sub="julho/2026" />
-        <Kpi label="Custo no mês" valor={brl(m.custoMes)} sub="combustível estimado" />
-        <Kpi label="Roteiros concluídos" valor={m.concluidos.length} sub="no período" />
-        <Kpi
-          label="Revisões vencidas"
-          valor={m.frota.filter((v) => v.situacao === "vencida").length}
-          sub="verificar"
-          tom={m.frota.some((v) => v.situacao === "vencida") ? "red" : null}
-        />
-      </div>
-
-      {m.frota.filter((v) => v.situacao !== "ok").length > 0 && (
-        <section className="bloco">
-          <h3>Precisa de atenção</h3>
-          {m.frota
-            .filter((v) => v.situacao !== "ok")
-            .map((v) => (
-              <div key={v.placa} className="alerta" onClick={() => onSel(v.placa)}>
-                <span className={"tag " + v.situacao}>
-                  {v.situacao === "vencida" ? "Revisão vencida" : v.situacao === "proxima" ? "Revisão próxima" : "Sem revisão"}
-                </span>
-                <span className="mono">{v.placa}</span>
-                <span className="mute-xs">
-                  {v.modelo} · {km(v.km)}
-                  {v.falta != null && v.falta <= 0 && ` · passou ${nf.format(-v.falta)} km`}
-                </span>
-              </div>
-            ))}
-        </section>
-      )}
-    </>
-  );
-}
-
-function Kpi({ label, valor, sub, tom }) {
+/* ============================ OPERAÇÃO (kanban) ============================ */
+function Kpi({ lbl, val, sub, tom }) {
   return (
     <div className="kpi">
-      <div className="kpi-label">{label}</div>
-      <div className={"kpi-val mono" + (tom === "red" ? " red" : "")}>{valor}</div>
-      <div className="mute-xs">{sub}</div>
+      <div className="lbl">{lbl}</div>
+      <div className={"val mono" + (tom ? " " + tom : "")}>{val}</div>
+      <div className="sub">{sub}</div>
     </div>
   );
 }
 
-/* ---------- FROTA ---------- */
-function Frota({ m, onSel }) {
+function Card({ children, onClick }) {
+  return <div className="card" onClick={onClick}>{children}</div>;
+}
+
+function Operacao({ m, onSel, referencia }) {
+  const mesLbl = MESES[parseInt(referencia.slice(5, 7), 10) - 1] + "/" + referencia.slice(0, 4);
   return (
-    <section className="grid">
-      {m.frota.map((v) => {
-        const pct =
-          v.falta == null ? 0 : Math.max(0, Math.min(100, (1 - v.falta / JANELA_REVISAO) * 100));
+    <>
+      <section className="kpis">
+        <Kpi lbl="Na rua" val={m.naRua.length} sub="veículos em roteiro" />
+        <Kpi lbl="Concluídos hoje" val={m.concluidosHoje.length} sub="roteiros fechados" />
+        <Kpi lbl="Km no mês" val={nf.format(m.kmMes)} sub={mesLbl} />
+        <Kpi lbl="Custo no mês" val={brl(m.custoMes)} sub="combustível est." />
+        <Kpi lbl="Revisões vencidas" val={m.revisoesVencidas} sub="verificar" tom={m.revisoesVencidas > 0 ? "crit" : null} />
+        <Kpi lbl="Bloqueados" val={m.bloqueados.length} sub="aguardando reparo" tom={m.bloqueados.length > 0 ? "crit" : null} />
+      </section>
+
+      <div className="board-head">
+        <h2>Operação do dia</h2>
+        <span className="hint">atualiza conforme a equipe lança saída e chegada</span>
+      </div>
+
+      <section className="board">
+        <Coluna cor="var(--brand)" titulo="Na rua" n={m.naRua.length} vazio="Nenhum veículo na rua agora.">
+          {m.naRua.map((r, i) => (
+            <Card key={i} onClick={() => onSel(r.placa)}>
+              <div className="card-top"><Thumb /><Plate p={r.placa} /><span className="card-model">{r.veic.split(" - ")[0]}</span></div>
+              <div className="card-tec">{r.tec || "sem técnico"}</div>
+              <div className="card-meta"><span>Saiu <b className="mono">{r.hs || "—"}</b></span><span>Km <b className="mono">{nf.format(r.kms)}</b></span></div>
+            </Card>
+          ))}
+        </Coluna>
+
+        <Coluna cor="var(--ok)" titulo="Concluídos hoje" n={m.concluidosHoje.length} vazio="Nenhum roteiro fechado hoje ainda.">
+          {m.concluidosHoje.slice(0, 12).map((r, i) => (
+            <Card key={i} onClick={() => onSel(r.placa)}>
+              <div className="card-top"><Thumb /><Plate p={r.placa} /><span className="card-model">{r.veic.split(" - ")[0]}</span></div>
+              <div className="card-tec">{r.tec || "—"}</div>
+              <div className="card-meta"><span><b className="mono">{nf.format(r.kmr || 0)}</b> km</span><span>{brl((r.kmr || 0) * (m.porPlaca[r.placa]?.custoKm || 0))}</span></div>
+            </Card>
+          ))}
+          {m.concluidosHoje.length > 12 && <div className="empty">+ {m.concluidosHoje.length - 12} outros</div>}
+        </Coluna>
+
+        <Coluna cor="var(--warn)" titulo="Pendências" n={m.pend.length} vazio="Sem pendências. 👏">
+          {m.pend.map(({ r, tag }, i) => (
+            <Card key={i} onClick={() => onSel(r.placa)}>
+              <div className="card-top"><Thumb /><Plate p={r.placa} /><span className="card-model">{r.veic.split(" - ")[0]}</span><span className="tag warn ml-auto">{tag}</span></div>
+              <div className="card-tec">{r.tec || "—"}</div>
+              <div className="card-meta"><span>{tag === "km alto" ? nf.format(r.kmr) + " km — verificar" : "Saiu " + dataBR(r.ds) + " " + (r.hs || "")}</span></div>
+            </Card>
+          ))}
+        </Coluna>
+
+        <Coluna cor="var(--crit)" titulo="Bloqueados" n={m.bloqueados.length} vazio="Nenhum veículo bloqueado.">
+          {m.bloqInfo.map(({ v, motivo, urg, cond, data }, i) => (
+            <Card key={i} onClick={() => onSel(v.placa)}>
+              <div className="card-top"><Thumb /><Plate p={v.placa} /><span className="card-model">{v.modelo}</span>{urg && <span className="tag crit ml-auto">{String(urg).toLowerCase()}</span>}</div>
+              <div className="card-tec">{motivo || "Bloqueado"}</div>
+              <div className="card-meta"><span>{cond ? "Checklist de " + cond : "checklist"}{data ? " · " + dataBR(data) : ""}</span></div>
+            </Card>
+          ))}
+        </Coluna>
+      </section>
+
+      <div className="legend">Toque num cartão para ver a ficha completa do veículo.</div>
+    </>
+  );
+}
+
+function Coluna({ cor, titulo, n, vazio, children }) {
+  const arr = React.Children.toArray(children);
+  return (
+    <div className="col" style={{ "--c": cor }}>
+      <div className="col-head"><span className="cdot" /><span className="ct">{titulo}</span><span className="cn mono">{n}</span></div>
+      <div className="col-body">{arr.length ? arr : <div className="empty">{vazio}</div>}</div>
+    </div>
+  );
+}
+
+/* ============================ FROTA ============================ */
+function Frota({ m, onSel }) {
+  const todos = [...m.frota, ...m.bloqueados.map((v) => ({ ...v, situacao: "bloq" }))];
+  const rot = { vencida: ["Revisão vencida", "warn"], proxima: ["Revisão próxima", "warn"], ok: ["OK", "ok"], sem: ["Sem revisão", "mute"], bloq: ["Bloqueado", "crit"] };
+  return (
+    <section className="grid-veic">
+      {todos.map((v, i) => {
+        const [lbl, tom] = rot[v.situacao] || rot.sem;
         return (
-          <article key={v.placa} className="card" onClick={() => onSel(v.placa)}>
-            <div className="card-top">
-              <Placa placa={v.placa} />
-              {v.naRua && <span className="pill">na rua</span>}
+          <div key={i} className="vcard" onClick={() => onSel(v.placa)}>
+            <div className="vcard-top"><Thumb /><Plate p={v.placa} />{v.naRua && <span className="tag ok ml-auto">na rua</span>}</div>
+            <div className="vcard-model">{v.modelo} · {v.ano || "—"}</div>
+            <div className="vcard-resp">{v.resp && v.resp !== "—" ? v.resp : "sem responsável"}</div>
+            <div className="vcard-foot">
+              <span className="mono">{km(v.km)}</span>
+              <span className={"tag " + tom}>{lbl}</span>
             </div>
-            <div className="card-id">
-              <div className="modelo">{v.modelo}</div>
-              <div className="mute-xs">
-                {v.ano} · {v.resp}
-              </div>
-            </div>
-
-            <div className="odo">
-              <div className="odo-num mono">{nf.format(v.km || 0)}</div>
-              <div className="odo-un">km</div>
-            </div>
-
-            <div className="rev">
-              <div className="rev-bar">
-                <div className={"rev-fill " + v.situacao} style={{ width: pct + "%" }} />
-              </div>
-              <div className="rev-lab">
-                {v.falta == null ? (
-                  <span className="mute-xs">sem revisão programada</span>
-                ) : v.falta > 0 ? (
-                  <span className="mute-xs">
-                    faltam <b className="mono">{nf.format(v.falta)} km</b> para {nf.format(v.revisao)}
-                  </span>
-                ) : (
-                  <span className="red-xs">
-                    vencida há <b className="mono">{nf.format(-v.falta)} km</b>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="card-pe">
-              <span className="mute-xs">{v.kml ? v.kml + " km/l" : "—"}</span>
-              <span className="mute-xs mono">{v.custoKm ? "R$ " + v.custoKm.toFixed(2) + "/km" : "—"}</span>
-            </div>
-          </article>
+          </div>
         );
       })}
     </section>
   );
 }
 
-/* ---------- MANUTENÇÃO ---------- */
+/* ============================ CUSTOS ============================ */
+function Custos({ m }) {
+  const total = m.custos.reduce((s, c) => s + (c.total || 0), 0);
+  const kmTot = m.custos.reduce((s, c) => s + (c.km || 0), 0) || 1;
+  const max = Math.max(1, ...m.custos.map((c) => c.total || 0));
+  return (
+    <>
+      <section className="kpis kpis-3">
+        <Kpi lbl="Custo acumulado" val={brl(total)} sub="combustível, período" />
+        <Kpi lbl="Custo médio" val={"R$ " + (total / kmTot).toFixed(2)} sub="por km rodado" />
+        <Kpi lbl="Manutenção" val={brl(m.gastoManut)} sub="no período" />
+      </section>
+      <div className="board-head"><h2>Custo por veículo</h2></div>
+      <section className="panel">
+        {m.custos.map((c, i) => (
+          <div key={i} className="barra">
+            <div className="barra-top"><Plate p={c.placa} /><span className="mute-xs">{(c.veic || "").split(" - ")[0]}</span><span className="mono forte ml-auto">{brl(c.total)}</span></div>
+            <div className="trilho"><div className="fill" style={{ width: (100 * (c.total || 0) / max) + "%" }} /></div>
+            <div className="mute-xs">{km(c.km)} · R$ {(c.medio || 0).toFixed(2)}/km</div>
+          </div>
+        ))}
+        {m.custos.length === 0 && <div className="empty">Sem custos no período.</div>}
+      </section>
+    </>
+  );
+}
+
+/* ============================ MANUTENÇÕES ============================ */
 function Manut({ m }) {
   return (
     <>
-      <div className="kpis">
-        <Kpi label="Manutenções" valor={m.manutencoes.length} sub="registradas" />
-        <Kpi label="Gasto total" valor={brl(m.gastoManut)} sub="peças e serviços" />
-        <Kpi label="Em aberto" valor={m.manutencoes.filter((x) => x.status !== "CONCLUÍDA").length} sub="aguardando" />
-        <Kpi label="Bloqueios no checklist" valor={m.bloqueios.length} sub="apontados em campo" />
-      </div>
-
-      <section className="bloco">
-        <h3>Histórico</h3>
-        {m.manutencoes
-          .slice()
-          .sort((a, b) => (b.data || "").localeCompare(a.data || ""))
-          .map((x) => (
-            <div key={x.id} className="man">
-              <div className="man-head">
-                <span className="mono forte">{x.placa}</span>
-                <span className={"tag " + (x.tipo === "CORRETIVA" ? "corr" : "prev")}>{x.tipo}</span>
-                <span className="mono valor">{brl(x.valor)}</span>
-              </div>
-              <div className="man-serv">{x.servico}</div>
-              <div className="mute-xs">
-                {dataBR(x.data)} → {dataBR(x.conclusao)} · {x.oficina} · {km(x.km)} · origem: {x.origem?.toLowerCase()}
-              </div>
-            </div>
-          ))}
+      <div className="board-head"><h2>Manutenções</h2><span className="hint">{m.manutencoes.length} registro(s)</span></div>
+      <section className="panel">
+        {m.manutencoes.map((x, i) => (
+          <div key={i} className="man">
+            <div className="man-head"><Plate p={x.placa} /><span className="mute-xs">{x.tipo || "—"}</span><span className="tag mute">{x.status || "—"}</span><span className="mono forte ml-auto">{brl(x.valor)}</span></div>
+            <div className="man-serv">{x.servico || x.prob || "—"}</div>
+            <div className="mute-xs">{dataBR(x.data)} · {x.oficina || "—"}</div>
+          </div>
+        ))}
+        {m.manutencoes.length === 0 && <div className="empty">Nenhuma manutenção registrada.</div>}
       </section>
-
-      {m.bloqueios.length > 0 && (
-        <section className="bloco">
-          <h3>Apontamentos do checklist</h3>
-          {m.bloqueios.slice(0, 12).map((c, i) => (
-            <div key={i} className="man">
-              <div className="man-head">
-                <span className="mono forte">{c.placa}</span>
-                <span className={"tag " + (c.urg === "EMERGENCIAL" || c.urg === "ALTA" ? "vencida" : "proxima")}>
-                  {c.urg?.toLowerCase()}
-                </span>
-                <span className="mute-xs">{dataBR(c.data)}</span>
-              </div>
-              <div className="man-serv">
-                {c.motivo} — {c.desc}
-              </div>
-              <div className="mute-xs">{c.cond}</div>
-            </div>
-          ))}
-        </section>
-      )}
     </>
   );
 }
 
-/* ---------- CUSTOS ---------- */
-function Custos({ m }) {
-  const max = Math.max(...m.custos.map((c) => c.total));
-  const total = m.custos.reduce((s, c) => s + c.total, 0);
-  const kmTot = m.custos.reduce((s, c) => s + c.km, 0);
+/* ============================ RELATÓRIOS ============================ */
+function Relatorios({ m, referencia }) {
+  function baixarCSV() {
+    const linhas = [["placa", "veiculo", "data_saida", "hora_saida", "data_chegada", "tecnico", "km_saida", "km_chegada", "km_rodado", "situacao"]];
+    m.roteiros.forEach((r) => linhas.push([r.placa, (r.veic || "").split(" - ")[0], r.ds || "", r.hs || "", r.dc || "", r.tec || "", r.kms ?? "", r.kmc ?? "", r.kmr ?? "", r.st || ""]));
+    const csv = linhas.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "roteiros-" + referencia + ".csv";
+    a.click();
+  }
+  const total = m.custos.reduce((s, c) => s + (c.total || 0), 0);
   return (
     <>
-      <div className="kpis">
-        <Kpi label="Custo acumulado" valor={brl(total)} sub="combustível, período todo" />
-        <Kpi label="Km acumulado" valor={nf.format(kmTot)} sub="frota inteira" />
-        <Kpi label="Custo médio" valor={"R$ " + (total / kmTot).toFixed(2)} sub="por km rodado" />
-        <Kpi label="Manutenção" valor={brl(m.gastoManut)} sub="no mesmo período" />
-      </div>
-
-      <section className="bloco">
-        <h3>Custo por veículo</h3>
-        <p className="nota">
-          Calculado sobre o km rodado de cada roteiro, usando o consumo e o preço do combustível do cadastro.
-        </p>
-        {m.custos.map((c) => (
-          <div key={c.placa} className="barra">
-            <div className="barra-top">
-              <span className="mono forte">{c.placa}</span>
-              <span className="mute-xs">{c.veic.split(" - ")[0]}</span>
-              <span className="mono valor">{brl(c.total)}</span>
-            </div>
-            <div className="barra-trilho">
-              <div className="barra-fill" style={{ width: (c.total / max) * 100 + "%" }} />
-            </div>
-            <div className="mute-xs mono">
-              {nf.format(c.km)} km · R$ {c.medio.toFixed(2)}/km
-            </div>
+      <div className="board-head"><h2>Relatórios</h2><span className="hint">exporte e imprima os dados da frota</span></div>
+      <section className="rel-grid">
+        <div className="rel-card">
+          <h3>Roteiros (planilha)</h3>
+          <p className="mute-xs">Todos os roteiros com km, técnico e situação, para abrir no Excel.</p>
+          <button className="btn primary" onClick={baixarCSV}>↧ Baixar CSV</button>
+        </div>
+        <div className="rel-card">
+          <h3>Resumo para impressão</h3>
+          <p className="mute-xs">Visão do período com custos e frota, pronta para PDF (imprimir → salvar como PDF).</p>
+          <button className="btn" onClick={() => window.print()}>🖨 Imprimir / PDF</button>
+        </div>
+        <div className="rel-card">
+          <h3>Números do período</h3>
+          <div className="rel-nums">
+            <div><b className="mono">{nf.format(m.kmMes)}</b><span>km no mês</span></div>
+            <div><b className="mono">{brl(m.custoMes)}</b><span>combustível</span></div>
+            <div><b className="mono">{m.concluidos.length}</b><span>concluídos</span></div>
+            <div><b className="mono">{brl(total)}</b><span>custo total</span></div>
           </div>
-        ))}
+        </div>
       </section>
     </>
   );
 }
 
-/* ---------- PENDÊNCIAS / QUALIDADE ---------- */
-function Pendencias({ m, REF }) {
-  return (
-    <>
-      <p className="nota nota-topo">
-        Estes são registros que a planilha não conseguiu fechar sozinha. Cada um vira uma correção manual hoje —
-        e some quando o lançamento passar a ser feito pelo app.
-      </p>
-
-      <section className="bloco">
-        <h3>
-          Saídas sem chegada <span className="count mono">{m.semFechamento.length}</span>
-        </h3>
-        <p className="nota">O técnico registrou a saída e nunca fechou o roteiro. O km do dia se perde.</p>
-        {m.semFechamento.map((r, i) => (
-          <div key={i} className="linha">
-            <span className="mono forte">{r.placa}</span>
-            <span className="mute-xs">{r.tec}</span>
-            <span className="mono mute-xs">
-              {dataBR(r.ds)} {r.hs} · {km(r.kms)}
-            </span>
-            <span className="atraso mono">{diasEntre(r.ds, REF)}d</span>
-          </div>
-        ))}
-      </section>
-
-      <section className="bloco">
-        <h3>
-          Chegadas sem saída <span className="count mono">{m.chegadaSemSaida.length}</span>
-        </h3>
-        <p className="nota">Roteiro fechado sem abertura correspondente.</p>
-        {m.chegadaSemSaida.map((r, i) => (
-          <div key={i} className="linha">
-            <span className="mono forte">{r.placa}</span>
-            <span className="mute-xs">{r.tec}</span>
-            <span className="mono mute-xs">
-              {dataBR(r.dc)} · {km(r.kmc)}
-            </span>
-          </div>
-        ))}
-      </section>
-
-      <section className="bloco">
-        <h3>
-          Km fora do padrão <span className="count mono">{m.kmSuspeito.length}</span>
-        </h3>
-        <p className="nota">Provável erro de digitação do hodômetro. Um campo numérico com validação resolve.</p>
-        {m.kmSuspeito.map((r, i) => (
-          <div key={i} className="linha">
-            <span className="mono forte">{r.placa}</span>
-            <span className="mute-xs">{dataBR(r.ds)}</span>
-            <span className="mono mute-xs">
-              {nf.format(r.kms)} → {nf.format(r.kmc)}
-            </span>
-            <span className="atraso mono">{nf.format(r.kmr)} km</span>
-          </div>
-        ))}
-      </section>
-    </>
-  );
-}
-
-/* ---------- FICHA DO VEÍCULO ---------- */
+/* ============================ FICHA ============================ */
 function Ficha({ placa, m, onClose }) {
   const v = m.porPlaca[placa];
-  const rot = m.roteiros
-    .filter((r) => r.placa === placa && r.ds)
-    .sort((a, b) => b.ds.localeCompare(a.ds))
-    .slice(0, 15);
-  const man = m.manutencoes.filter((x) => x.placa === placa);
-  const custo = m.custos.find((c) => c.placa === placa);
-
+  const rots = m.roteiros.filter((r) => r.placa === placa).sort((a, b) => (b.ds || "").localeCompare(a.ds || "")).slice(0, 8);
+  const mans = m.manutencoes.filter((x) => x.placa === placa);
+  const chks = m.checklists.filter((c) => c.placa === placa).sort((a, b) => (b.data || "").localeCompare(a.data || "")).slice(0, 5);
+  if (!v) return null;
   return (
     <div className="modal" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
-          <Placa placa={placa} />
-          <button className="fechar" onClick={onClose} aria-label="Fechar">
-            ✕
-          </button>
+          <div className="card-top"><Thumb /><Plate p={placa} /><span className="card-model">{v.modelo} · {v.ano || "—"}</span></div>
+          <button className="fechar" onClick={onClose}>✕</button>
         </div>
-        <div className="sheet-sub">
-          {v.modelo} · {v.ano} · {v.resp}
-        </div>
+        <div className="sheet-sub">{v.resp && v.resp !== "—" ? v.resp : "sem responsável"} · status {v.status}</div>
 
         <div className="mini-kpis">
-          <div>
-            <div className="mute-xs">Hodômetro</div>
-            <div className="mono forte">{km(v.km)}</div>
-          </div>
-          <div>
-            <div className="mute-xs">Próxima revisão</div>
-            <div className="mono forte">{km(v.revisao)}</div>
-          </div>
-          <div>
-            <div className="mute-xs">Custo/km</div>
-            <div className="mono forte">R$ {v.custoKm?.toFixed(2) ?? "—"}</div>
-          </div>
-          <div>
-            <div className="mute-xs">Acumulado</div>
-            <div className="mono forte">{brl(custo?.total)}</div>
-          </div>
+          <div><div className="mute-xs">Km atual</div><div className="forte mono">{km(v.km)}</div></div>
+          <div><div className="mute-xs">Próx. revisão</div><div className="forte mono">{v.revisao ? nf.format(v.revisao) : "—"}</div></div>
+          <div><div className="mute-xs">Custo/km</div><div className="forte mono">{v.custoKm ? "R$ " + Number(v.custoKm).toFixed(2) : "—"}</div></div>
+          <div><div className="mute-xs">Consumo</div><div className="forte mono">{v.kml ? v.kml + " km/l" : "—"}</div></div>
         </div>
 
-        {man.length > 0 && (
-          <>
-            <h4>Manutenções</h4>
-            {man.map((x) => (
-              <div key={x.id} className="linha">
-                <span className="mute-xs">{dataBR(x.conclusao || x.data)}</span>
-                <span className="man-serv">{x.servico}</span>
-                <span className="mono valor">{brl(x.valor)}</span>
-              </div>
-            ))}
-          </>
-        )}
-
         <h4>Últimos roteiros</h4>
-        {rot.map((r, i) => (
-          <div key={i} className="linha">
-            <span className="mono mute-xs">{dataBR(r.ds)}</span>
-            <span className="mute-xs">{r.tec}</span>
-            <span className="mono">{r.kmr ? nf.format(r.kmr) + " km" : "—"}</span>
-            <span className={"st " + (r.st === "CONCLUÍDO" ? "ok" : "warn")}>
-              {r.st === "CONCLUÍDO" ? "ok" : r.st.replace("CONCLUÍDO - ", "").toLowerCase()}
-            </span>
-          </div>
+        {rots.length === 0 ? <p className="mute-xs">Sem roteiros.</p> : rots.map((r, i) => (
+          <div key={i} className="linha"><span className="mono">{dataBR(r.ds)}</span><span className="mute-xs">{r.tec || "—"}</span><span className="mono ml-auto">{r.kmr != null ? nf.format(r.kmr) + " km" : r.st}</span></div>
         ))}
+
+        {mans.length > 0 && <><h4>Manutenções</h4>{mans.map((x, i) => (
+          <div key={i} className="linha"><span className="mono">{dataBR(x.data)}</span><span className="mute-xs">{x.servico || x.prob}</span><span className="mono ml-auto">{brl(x.valor)}</span></div>
+        ))}</>}
+
+        {chks.length > 0 && <><h4>Checklists</h4>{chks.map((c, i) => (
+          <div key={i} className="linha"><span className="mono">{dataBR(c.data)}</span><span className="mute-xs">{c.motivo ? "⚠ " + c.motivo : "OK"}</span><span className="mute-xs ml-auto">{c.cond}</span></div>
+        ))}</>}
       </div>
     </div>
   );
 }
 
-/* ---------- estilo ---------- */
+/* ============================ CSS ============================ */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..112,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+.app{--bg:#EBEEF4;--surface:#fff;--surface-2:#F4F6FB;--border:#DBE0EA;--border-strong:#C4CCDA;
+  --ink:#16233C;--ink-2:#53607A;--ink-3:#8591A5;--brand:#2B4C8C;--navy:#17263F;--navy-2:#223B63;
+  --silver:#AEB8C6;--ok:#1B9E6B;--ok-bg:#E5F4EE;--warn:#C08306;--warn-bg:#FAEFD6;--crit:#CE3A44;--crit-bg:#FAE5E7;
+  --shadow:0 1px 2px rgba(22,35,60,.06),0 8px 24px rgba(22,35,60,.05);
+  min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.app .mono{font-variant-numeric:tabular-nums}
+.app button{font-family:inherit}
+.mute-xs{font-size:12px;color:var(--ink-2)}
+.forte{font-weight:650;color:var(--ink)}
+.ml-auto{margin-left:auto}
 
-.app{
-  --bg:#E9EDF2; --surf:#fff; --ink:#101A26; --mute:#5C6B7C;
-  --blue:#003399; --line:#D6DEE8; --red:#C42B2B; --amber:#E08A00; --green:#17795E;
-  background:var(--bg); color:var(--ink); min-height:100vh;
-  font-family:'Archivo',system-ui,sans-serif; font-size:15px; line-height:1.45;
-  -webkit-font-smoothing:antialiased;
-}
-.app *{box-sizing:border-box;margin:0;padding:0}
-.app .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.app .mute-xs{font-size:11.5px;color:var(--mute);letter-spacing:.01em}
-.app .red-xs{font-size:11.5px;color:var(--red);font-weight:600}
-.app .forte{font-weight:600}
-.app .red{color:var(--red)}
+.topbar{background:linear-gradient(180deg,var(--navy),var(--navy-2));color:#fff;position:sticky;top:0;z-index:10}
+.topbar-in{max-width:1240px;margin:0 auto;padding:13px 20px;display:flex;align-items:center;gap:14px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:11px;flex:none;background:linear-gradient(135deg,#24406F,#16273F);display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--silver);font-weight:700}
+.brand-txt h1{margin:2px 0 0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+.spacer{flex:1}
+.top-meta{text-align:right;line-height:1.3}
+.top-meta .d{font-size:13px;font-weight:600}
+.top-meta .s{font-size:11.5px;color:var(--silver)}
+.sair{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+.sair:hover{background:rgba(255,255,255,.2)}
 
-/* topo */
-.top{position:sticky;top:0;z-index:20;background:var(--ink);color:#fff}
-.top-in{display:flex;justify-content:space-between;align-items:flex-end;padding:16px 18px 12px;max-width:1080px;margin:0 auto}
-.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:#8FA3BC;font-weight:600}
-.top h1{font-size:26px;font-weight:800;font-stretch:88%;letter-spacing:-.02em;line-height:1}
-.top-meta{text-align:right}
-.top-meta .mono{font-size:13px;font-weight:500}
-.top-meta .mute-xs{color:#8FA3BC}
-.tabs{display:flex;gap:2px;padding:0 12px;max-width:1080px;margin:0 auto;overflow-x:auto}
-.tab{background:none;border:0;color:#8FA3BC;font-family:inherit;font-size:12.5px;font-weight:600;
-  padding:9px 12px 11px;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;letter-spacing:.02em}
-.tab:hover{color:#fff}
-.tab.on{color:#fff;border-bottom-color:#5C9BFF}
-.tab:focus-visible{outline:2px solid #5C9BFF;outline-offset:-2px}
-.dot{display:inline-block;margin-left:6px;background:var(--red);color:#fff;font-size:10px;
-  padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace}
+.subnav{background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:70px;z-index:9}
+.subnav-in{max-width:1240px;margin:0 auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto}
+.navtab{padding:13px 14px;font-size:13px;font-weight:600;color:var(--ink-2);border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.navtab.on{color:var(--brand);border-bottom-color:var(--brand)}
+.dotn{background:var(--crit);color:#fff;font-size:10px;font-weight:700;border-radius:20px;padding:0 6px;min-width:16px;text-align:center}
 
-.wrap{max-width:1080px;margin:0 auto;padding:18px 14px 60px;display:flex;flex-direction:column;gap:16px}
+.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 64px}
+.actions{display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);box-shadow:var(--shadow);text-decoration:none}
+.btn.primary{background:var(--brand);border-color:transparent;color:#fff}
+.btn.rel{margin-left:auto}
 
-/* placa mercosul */
-.plate{background:#fff;border:1.5px solid var(--ink);border-radius:4px;overflow:hidden;width:106px;flex:none}
-.plate-band{background:var(--blue);height:13px;display:flex;align-items:center;padding:0 3px;gap:3px}
-.plate-br{width:8px;height:6px;background:#2A9D4A;border-radius:1px;flex:none}
-.plate-pais{color:#fff;font-size:6px;font-weight:700;letter-spacing:.14em;flex:1;text-align:center;font-family:'Archivo',sans-serif}
-.plate-uf{color:#fff;font-size:6px;font-weight:700;font-family:'IBM Plex Mono',monospace}
-.plate-num{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:17px;text-align:center;
-  padding:3px 0 4px;letter-spacing:.04em}
-.plate-mini{width:80px}
-.plate-mini .plate-num{font-size:13px;padding:2px 0 3px}
-.plate-mini .plate-band{height:10px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:24px}
+.kpis-3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow)}
+.kpi .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.kpi .val{font-size:25px;font-weight:700;letter-spacing:-.02em;margin-top:7px;line-height:1}
+.kpi .val.crit{color:var(--crit)}
+.kpi .sub{font-size:11.5px;color:var(--ink-2);margin-top:6px}
 
-/* hero */
-.hero{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:16px}
-.hero-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.hero h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;font-weight:700;font-stretch:88%}
-.count{background:var(--ink);color:#fff;font-size:12px;padding:1px 8px;border-radius:10px;font-weight:600}
-.vazio{color:var(--mute);font-size:13px;padding:8px 0}
-.rua{list-style:none;display:flex;flex-direction:column;gap:1px}
-.rua-item{display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:6px;cursor:pointer;
-  border-left:3px solid var(--blue);background:#F5F8FC}
-.rua-item:hover{background:#EBF1F9}
-.rua-mid{flex:1;min-width:0}
-.rua-veic{font-weight:600;font-size:14px;font-stretch:92%}
-.rua-right{text-align:right}
-.rua-right .forte{font-size:15px}
+.board-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.board-head h2{font-size:15px;font-weight:650;margin:0}
+.board-head .hint{font-size:12px;color:var(--ink-3)}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
+@media(max-width:980px){.board{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.board{grid-template-columns:1fr}}
+.col{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.col-head{display:flex;align-items:center;gap:8px;padding:12px 14px 11px;border-top:3px solid var(--c)}
+.cdot{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.ct{font-size:12.5px;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+.cn{margin-left:auto;font-size:12px;font-weight:700;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 9px}
+.col-body{padding:4px 10px 12px;display:flex;flex-direction:column;gap:9px;min-height:40px}
 
-/* kpis */
-.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-@media(min-width:720px){.kpis{grid-template-columns:repeat(4,1fr)}}
-.kpi{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:13px 14px}
-.kpi-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--mute);font-weight:600}
-.kpi-val{font-size:23px;font-weight:600;letter-spacing:-.03em;margin:3px 0 1px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 12px;box-shadow:0 1px 2px rgba(22,35,60,.04);cursor:pointer}
+.card:hover{border-color:var(--border-strong)}
+.card-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.thumb{width:34px;height:34px;border-radius:8px;flex:none;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;color:var(--brand)}
+.plate{font-weight:700;font-size:12px;letter-spacing:.04em;color:var(--ink);background:var(--surface-2);border:1px solid var(--border-strong);border-radius:6px;padding:2px 7px}
+.card-model{font-size:12px;color:var(--ink-2);font-weight:500}
+.card-tec{font-size:13px;font-weight:600;margin-bottom:6px}
+.card-meta{display:flex;gap:12px;font-size:11.5px;color:var(--ink-2)}
+.card-meta b{color:var(--ink);font-weight:650}
+.tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 7px;border-radius:5px}
+.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.tag.crit{background:var(--crit-bg);color:var(--crit)}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.tag.mute{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--border)}
+.empty{font-size:12px;color:var(--ink-3);padding:10px 4px;text-align:center}
+.legend{margin-top:24px;font-size:12px;color:var(--ink-3);text-align:center}
 
-/* blocos */
-.bloco{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:16px}
-.bloco h3{font-size:13px;text-transform:uppercase;letter-spacing:.12em;font-weight:700;font-stretch:88%;
-  margin-bottom:10px;display:flex;align-items:center;gap:8px}
-.bloco h4{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--mute);
-  font-weight:700;margin:16px 0 6px}
-.nota{font-size:12px;color:var(--mute);margin:-4px 0 12px;max-width:60ch}
-.nota-topo{background:#FDF6E3;border:1px solid #EBDCB2;border-radius:8px;padding:12px 14px;margin:0;color:#6B5A2E}
+.grid-veic{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.vcard{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:var(--shadow);cursor:pointer}
+.vcard:hover{border-color:var(--border-strong)}
+.vcard-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.vcard-model{font-size:14px;font-weight:650}
+.vcard-resp{font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.vcard-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:13px}
 
-.alerta{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);cursor:pointer;flex-wrap:wrap}
-.alerta:hover{opacity:.7}
-.tag{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;padding:2px 7px;border-radius:4px}
-.tag.vencida{background:#FBE9E9;color:var(--red)}
-.tag.proxima{background:#FDF3E0;color:var(--amber)}
-.tag.sem{background:#EEF1F5;color:var(--mute)}
-.tag.prev{background:#E7F3EE;color:var(--green)}
-.tag.corr{background:#FBE9E9;color:var(--red)}
-
-/* frota */
-.grid{display:grid;grid-template-columns:1fr;gap:12px}
-@media(min-width:600px){.grid{grid-template-columns:repeat(2,1fr)}}
-@media(min-width:900px){.grid{grid-template-columns:repeat(3,1fr)}}
-.card{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:14px;cursor:pointer;
-  display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
-.card:hover{border-color:var(--ink)}
-.card-top{display:flex;justify-content:space-between;align-items:flex-start}
-.pill{background:var(--blue);color:#fff;font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;
-  font-weight:700;padding:3px 7px;border-radius:4px}
-.modelo{font-weight:700;font-size:15px;font-stretch:88%;letter-spacing:-.01em}
-.odo{display:flex;align-items:baseline;gap:5px;padding:6px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.odo-num{font-size:27px;font-weight:600;letter-spacing:-.04em}
-.odo-un{font-size:12px;color:var(--mute);font-weight:600}
-.rev-bar{height:5px;background:#E3E9F0;border-radius:3px;overflow:hidden;margin-bottom:5px}
-.rev-fill{height:100%;border-radius:3px}
-.rev-fill.ok{background:var(--green)}
-.rev-fill.proxima{background:var(--amber)}
-.rev-fill.vencida{background:var(--red);width:100%!important}
-.card-pe{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:8px}
-
-/* manutenção */
-.man{padding:11px 0;border-top:1px solid var(--line)}
-.man-head{display:flex;align-items:center;gap:9px;margin-bottom:3px;flex-wrap:wrap}
-.valor{margin-left:auto;font-weight:600;font-size:13px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 16px;box-shadow:var(--shadow)}
+.barra{padding:12px 0;border-top:1px solid var(--border)}
+.barra:first-child{border-top:none}
+.barra-top{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.trilho{height:7px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:5px}
+.fill{height:100%;background:var(--brand)}
+.man{padding:12px 0;border-top:1px solid var(--border)}
+.man:first-child{border-top:none}
+.man-head{display:flex;align-items:center;gap:9px;margin-bottom:4px;flex-wrap:wrap}
 .man-serv{font-size:13.5px;margin-bottom:2px}
 
-/* barras */
-.barra{padding:11px 0;border-top:1px solid var(--line)}
-.barra-top{display:flex;align-items:center;gap:9px;margin-bottom:5px}
-.barra-trilho{height:7px;background:#E3E9F0;border-radius:4px;overflow:hidden;margin-bottom:4px}
-.barra-fill{height:100%;background:var(--blue);border-radius:4px}
+.rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.rel-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:var(--shadow)}
+.rel-card h3{margin:0 0 6px;font-size:14.5px}
+.rel-card p{margin:0 0 14px}
+.rel-nums{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rel-nums div{display:flex;flex-direction:column}
+.rel-nums b{font-size:18px}
+.rel-nums span{font-size:11px;color:var(--ink-3)}
 
-/* linhas */
-.linha{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
-.linha .mute-xs{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.atraso{margin-left:auto;background:#FBE9E9;color:var(--red);font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;flex:none}
-.st{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;padding:1px 6px;border-radius:4px;flex:none}
-.st.ok{background:#E7F3EE;color:var(--green)}
-.st.warn{background:#FDF3E0;color:var(--amber)}
+.linha{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);font-size:13px}
+.linha .mute-xs{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* ficha */
-.modal{position:fixed;inset:0;background:rgba(16,26,38,.55);z-index:40;display:flex;
-  align-items:flex-end;justify-content:center;padding:0}
+.modal{position:fixed;inset:0;background:rgba(16,26,38,.55);z-index:40;display:flex;align-items:flex-end;justify-content:center}
 @media(min-width:700px){.modal{align-items:center;padding:24px}}
-.sheet{background:var(--bg);width:100%;max-width:620px;max-height:88vh;overflow-y:auto;
-  border-radius:14px 14px 0 0;padding:18px}
-@media(min-width:700px){.sheet{border-radius:12px}}
-.sheet-head{display:flex;justify-content:space-between;align-items:flex-start}
-.sheet-sub{font-size:13px;color:var(--mute);margin:8px 0 14px}
-.fechar{background:none;border:1px solid var(--line);border-radius:6px;width:30px;height:30px;
-  cursor:pointer;color:var(--mute);font-size:13px}
-.fechar:hover{background:#fff;color:var(--ink)}
-.mini-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;background:var(--surf);
-  border:1px solid var(--line);border-radius:10px;padding:14px}
+.sheet{background:var(--bg);width:100%;max-width:600px;max-height:88vh;overflow-y:auto;border-radius:14px 14px 0 0;padding:18px}
+@media(min-width:700px){.sheet{border-radius:14px}}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.sheet-sub{font-size:13px;color:var(--ink-2);margin:10px 0 14px}
+.fechar{background:var(--surface);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;cursor:pointer;color:var(--ink-2);font-size:14px;flex:none}
+.sheet h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin:18px 0 2px}
+.mini-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
 @media(min-width:520px){.mini-kpis{grid-template-columns:repeat(4,1fr)}}
 .mini-kpis .forte{font-size:15px;margin-top:1px}
-.sheet .linha{border-top-color:#DCE3EC}
 
-@media(prefers-reduced-motion:reduce){.app *{transition:none!important;animation:none!important}}
+@media print{.topbar,.subnav,.actions,.legend,.sair{display:none!important}.app{background:#fff}}
+@media(prefers-reduced-motion:reduce){.app *{transition:none!important}}
 `;
