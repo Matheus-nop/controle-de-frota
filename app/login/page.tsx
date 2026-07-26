@@ -24,6 +24,7 @@ export default function LoginPage() {
       setErro(error.message);
       setCarregando(false);
     } else {
+      // recarrega em "/" para o proxy enxergar a sessao no cookie.
       window.location.href = "/";
     }
   }
@@ -60,6 +61,12 @@ export default function LoginPage() {
           boxShadow: "0 8px 30px rgba(16,26,38,.06)",
         }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.png"
+          alt="Grupo Nova Opção"
+          style={{ height: 40, marginBottom: 18, display: "block" }}
+        />
         <div
           style={{
             fontSize: 11,
