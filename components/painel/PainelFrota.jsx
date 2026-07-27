@@ -109,11 +109,7 @@ export default function PainelFrota({ dados, referencia }) {
       <header className="topbar">
         <div className="topbar-in">
           <div className="brand">
-            <span className="logo-chip"><img src="/logo.png" alt="Grupo Nova Opção" /></span>
-            <span className="brand-div" />
-            <div className="brand-txt">
-              <h1>Controle de Frota</h1>
-            </div>
+            <img className="logo-h" src="/logo-white.png" alt="Grupo Nova Opção" />
           </div>
           <div className="spacer" />
           <div className="top-meta">
@@ -416,9 +412,8 @@ const CSS = `
 .topbar{background:linear-gradient(180deg,var(--navy),var(--navy-2));color:#fff;position:sticky;top:0;z-index:10}
 .topbar-in{max-width:1240px;margin:0 auto;padding:13px 20px;display:flex;align-items:center;gap:14px}
 .brand{display:flex;align-items:center;gap:12px}
-.logo-chip{background:#fff;border-radius:9px;padding:6px 10px;display:flex;align-items:center;flex:none;box-shadow:0 1px 3px rgba(0,0,0,.15)}
-.logo-chip img{height:26px;display:block}
-.brand-div{width:1px;height:28px;background:rgba(255,255,255,.2)}
+.logo-h{height:42px;display:block}
+@media(max-width:560px){.logo-h{height:34px}}
 .thumb-img{width:100%;height:100%;object-fit:cover;border-radius:8px}
 .eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--silver);font-weight:700}
 .brand-txt h1{margin:2px 0 0;font-size:17px;font-weight:650;letter-spacing:-.01em}
