@@ -109,7 +109,7 @@ export default function PainelFrota({ dados, referencia }) {
       <header className="topbar">
         <div className="topbar-in">
           <div className="brand">
-            <img className="logo-h" src="/logo-white.png" alt="Grupo Nova Opção" />
+            <img className="logo-h" src="/logowhite.png" alt="Grupo Nova Opção" />
           </div>
           <div className="spacer" />
           <div className="top-meta">
