@@ -151,7 +151,7 @@ export default function RegistrarSaidaPage() {
             <input id="km" type="number" inputMode="numeric" required value={km} onChange={(e) => setKm(e.target.value)} placeholder="ex.: 66402" style={inputStyle} />
 
             <label htmlFor="foto" style={labelStyle}>Foto do painel / hodômetro (opcional)</label>
-            <input id="foto" type="file" accept="image/*" onChange={(e) => setFoto(e.target.files)} style={{ ...inputStyle, padding: 8 }} />
+            <input id="foto" type="file" accept="image/*" capture="environment" onChange={(e) => setFoto(e.target.files)} style={{ ...inputStyle, padding: 8 }} />
 
             <label htmlFor="obs" style={labelStyle}>Observação (opcional)</label>
             <input id="obs" type="text" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="algo a registrar na saída" style={inputStyle} />
