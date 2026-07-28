@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "Controle de Frota — Grupo Nova Opção",
   description: "Gestao de frota do Grupo Nova Opcao para equipe de campo.",
   appleWebApp: { capable: true, title: "Frota", statusBarStyle: "black-translucent" },
-  icons: { icon: "/icon-192.png", apple: "/apple-icon.png" },
+    icons: { icon: "/icon192.png", apple: "/appleicon.png" },
 };
 
 export const viewport: Viewport = {
