@@ -231,7 +231,7 @@ export default function RegistrarChegadaPage() {
 
                 <label htmlFor="foto" style={labelStyle}>Foto do painel / hodômetro (opcional)</label>
                 <input id="foto" type="file" accept="image/*" onChange={(e) => setFoto(e.target.files)} style={{ ...inputStyle, padding: 8 }} />
-              </>
+              <capture="environment"/>
             )}
 
             <button type="submit" disabled={salvando || !sel} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: salvando || !sel ? "#7CA0C9" : "#1F6FEB", color: "#fff", fontSize: 15, fontWeight: 600, cursor: salvando || !sel ? "default" : "pointer" }}>
