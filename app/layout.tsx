@@ -2,8 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Controle de Frota",
-  description: "Painel de gestao de frota para equipe de campo.",
+  title: "Controle de Frota — Grupo Nova Opção",
+  description: "Gestao de frota do Grupo Nova Opcao para equipe de campo.",
+  appleWebApp: { capable: true, title: "Frota", statusBarStyle: "black-translucent" },
+  icons: { icon: "/icon-192.png", apple: "/apple-icon.png" },
 };
 
 export const viewport: Viewport = {
