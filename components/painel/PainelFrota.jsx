@@ -138,6 +138,7 @@ export default function PainelFrota({ dados, referencia }) {
           <a className="btn primary" href="/roteiro/saida">+ Registrar saída</a>
           <a className="btn" href="/roteiro/chegada">Registrar chegada</a>
           <a className="btn" href="/checklist">Checklist</a>
+                    <a className="btn" href="/manutencao">Manutenção</a>
                     <a className="btn" href="/veiculos">Veículos</a>
           <a className="btn rel" onClick={() => setView("relatorios")}>↧ Relatórios</a>
         </div>
