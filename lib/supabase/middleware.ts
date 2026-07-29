@@ -4,7 +4,10 @@ import { NextResponse, type NextRequest } from "next/server";
 // Rotas que nao exigem login.
 const ROTAS_PUBLICAS = ["/login", "/auth", "/api/health"];
 
-// Renova a sessao no cookie e faz a guarda de rota: anonimo vai para /login.
+// Rotas exclusivas do GESTOR. Tecnico que tentar entrar volta para /campo.
+const ROTAS_GESTOR = ["/veiculos"];
+
+// A raiz "/" e o painel do gestor; o tecnico e mandado para /campo.
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -43,6 +46,24 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
+  }
+
+  // Guarda por papel: so consulta o cadastro nas rotas que precisam decidir.
+  const precisaPapel = path === "/" || ROTAS_GESTOR.some((r) => path === r || path.startsWith(r + "/"));
+
+  if (user && precisaPapel) {
+    const { data } = await supabase
+      .from("tecnicos")
+      .select("papel")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const ehGestor = data?.papel === "GESTOR";
+    if (!ehGestor) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/campo";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
