@@ -3,6 +3,15 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+// Tecnico entra so com o usuario (ex.: "leonardo"); o dominio interno e
+// acrescentado aqui. Gestor entra com o e-mail real completo.
+const DOMINIO_INTERNO = "@frota.local";
+
+function paraLogin(entrada: string): string {
+  const v = entrada.trim().toLowerCase();
+  return v.includes("@") ? v : v.replace(/\s+/g, "") + DOMINIO_INTERNO;
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -16,15 +25,19 @@ export default function LoginPage() {
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: paraLogin(email),
       password: senha,
     });
 
     if (error) {
-      setErro(error.message);
+      setErro(
+        error.message.toLowerCase().includes("invalid")
+          ? "Usuário ou senha incorretos."
+          : error.message,
+      );
       setCarregando(false);
     } else {
-      // recarrega em "/" para o proxy enxergar a sessao no cookie.
+      // recarrega na raiz; o proxy manda o tecnico para /campo.
       window.location.href = "/";
     }
   }
@@ -80,20 +93,20 @@ export default function LoginPage() {
         </div>
         <h1 style={{ margin: "4px 0 2px", fontSize: 22 }}>Painel</h1>
         <p style={{ color: "#6B7A8D", fontSize: 14, marginBottom: 20 }}>
-          Acesso do gestor com e-mail e senha.
+          Entre com seu usuário e senha.
         </p>
 
         <form onSubmit={entrar}>
           <label htmlFor="email" style={{ fontSize: 13, fontWeight: 600 }}>
-            E-mail
+            Usuário
           </label>
           <input
             id="email"
-            type="email"
+            type="text"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="voce@empresa.com.br"
+            placeholder="seu usuário"
             style={inputStyle}
           />
 
