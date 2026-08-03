@@ -98,18 +98,26 @@ Rota `/historico`: as três fontes de foto viram uma linha do tempo só.
 
 ## Como trabalhar neste projeto
 
-**Importante:** a sessão do Claude Code **não tem permissão de escrita** no
-repositório (todo push dá 403). O fluxo que funciona:
-1. Claude escreve o código e **valida com `npm run build`** no ambiente dele.
-2. Claude entrega o conteúdo do arquivo (ou envia o arquivo).
-3. O gestor cola/sobe pelo **GitHub web** (Create new file / Upload files).
-4. A Vercel faz o deploy sozinha (~2 min).
+**Código: o Claude commita direto.** O 403 relatado nas primeiras sessões era o
+credential helper do git, não o token — `gh auth setup-git` resolve, e o token do
+`gh` tem escopo `repo` (push e admin no repositório). O fluxo:
+1. Claude escreve o código e **valida com `npm run build`**.
+2. Claude commita numa branch `claude/...` e abre PR.
+3. O gestor revisa e faz o merge. A Vercel deploya sozinha (~2 min).
+
+**Banco: continua manual.** Não há credencial do Supabase neste ambiente (a CLI
+não está instalada e não há token). O Claude entrega o `.sql` e o gestor cola no
+SQL editor. Rodar as migrations **antes** de fazer o merge do código que
+depende delas.
+
+**Node não está instalado na máquina.** Para validar o build, baixar o ZIP
+oficial do Node e extrair num caminho **curto** (`%LocalAppData%\Temp\n22`). No
+diretório de scratchpad da sessão o caminho passa dos 260 caracteres do MAX_PATH
+e o npm falha **sem imprimir nada** (por dentro é o resolver de ESM não achando
+o `#ansi-styles` do chalk). O PowerShell também está quebrado nesta máquina
+(erro de .NET Framework) — usar o Bash.
 
 **Armadilhas já encontradas** (evitar repetir):
-- Arquivo baixado repetido ganha `(1)` no nome e sobe duplicado — apagar o
-  antigo dos Downloads antes de baixar.
-- Hífen some do nome do arquivo no upload (`logo-white.png` → `logowhite.png`).
-- "Create new file" dentro de uma subpasta cria o caminho a partir dela.
 - Next.js 16: usar `proxy.ts` (não `middleware.ts` na raiz) — Edge não suporta
   o cliente Supabase.
 - Na Vercel, o Framework Preset precisa estar como **Next.js** (não "Other").
