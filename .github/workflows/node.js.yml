@@ -1,5 +1,6 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
+# CI: instala as dependencias e compila o app nas versoes de Node que a Vercel
+# usa. Nasceu do template padrao do GitHub, que trazia duas coisas incompativeis
+# com este projeto — ver os comentarios abaixo.
 
 name: Node.js CI
 
@@ -16,7 +17,11 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        # Sem 18.x: o Next.js 16 exige Node 20.9 ou maior, entao aquele job
+        # falhava sempre — e, com fail-fast, derrubava o 20.x e o 22.x junto.
+        # Resultado: CI vermelho em todo commit desde que o workflow entrou,
+        # com o build do projeto passando o tempo todo.
+        node-version: [20.x, 22.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
@@ -28,4 +33,9 @@ jobs:
         cache: 'npm'
     - run: npm ci
     - run: npm run build --if-present
-    - run: npm test
+    # `npm test` sem script `test` no package.json e erro, nao no-op. Com
+    # `npm run ... --if-present` o passo passa enquanto nao houver teste de
+    # front. Os testes que existem hoje sao de banco (supabase/tests/, pgTAP)
+    # e rodam com `supabase test db`, que precisa de um Postgres — quando valer
+    # a pena, entra como job separado com o service container.
+    - run: npm run test --if-present
