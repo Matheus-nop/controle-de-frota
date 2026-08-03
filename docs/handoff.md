@@ -32,6 +32,7 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/ocorrencia` | Relatar dano/acidente/avaria com foto obrigatória | todos |
 | `/ocorrencias` | Fila de ocorrências: tratar, resolver, virar manutenção | GESTOR |
 | `/historico` | Tudo que a equipe registrou, com as fotos, por veículo e período | GESTOR |
+| `/alertas` | O que precisa de atenção agora, com o botão que resolve cada caso | GESTOR |
 | `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
 | `/login` | Login por usuário + senha | público |
@@ -76,6 +77,22 @@ Rota `/historico`: as três fontes de foto viram uma linha do tempo só.
   "só com foto". Borda vermelha em checklist não apto, roteiro sem fechamento
   ou com pendência, e ocorrência grave.
 - A ficha do veículo (modal do painel) manda pra cá com `?placa=XXX`.
+
+### Alertas ativos (feito)
+Migration `0007_alertas_ativos.sql`: a view `v_alertas_ativos` devolve **uma
+linha por problema** — revisão (vencida/próxima), roteiro sem fechamento,
+veículo parado e ocorrência grave em aberto. Nada gravado em tabela, nada de
+job: a verdade é recalculada a cada consulta.
+- Tela `/alertas`, e o botão no painel ganha o contador (fica vermelho quando
+  há crítico). O painel lê a view em `lib/frota/data.ts`; se a migration não
+  tiver rodado, o contador só não aparece.
+- Cada alerta traz o botão que resolve o caso (roteiro → registrar chegada,
+  revisão → abrir manutenção, ocorrência → tratar, parado → histórico).
+- **Veículo que nunca saiu não é "parado", é sem histórico.** A regra exige um
+  roteiro anterior como referência — senão, no dia seguinte ao reset dos dados
+  de teste, a tela nasceria com a frota inteira em alerta.
+- `supabase/tests/alertas_ativos.test.sql` cobre os quatro alertas, os quatro
+  silêncios e o `security_invoker`.
 
 ## Próximos passos (na ordem combinada)
 

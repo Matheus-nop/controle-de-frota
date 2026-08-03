@@ -72,10 +72,26 @@ export interface ChecklistDados {
   [k: string]: unknown;
 }
 
+// Uma linha por problema, vinda pronta da view v_alertas_ativos.
+export interface AlertaAtivoDados {
+  tipo: string;
+  gravidade: string;
+  ordem: number;
+  veiculo_id: string;
+  placa: string;
+  modelo: string;
+  titulo: string;
+  detalhe: string | null;
+  desde: string | null;
+  [k: string]: unknown;
+}
+
 export interface Dados {
   veiculos: VeiculoDados[];
   roteiros: RoteiroDados[];
   manutencoes: ManutencaoDados[];
   custos: CustoDados[];
   checklists: ChecklistDados[];
+  // opcional: o SEED_DADOS nao tem alertas, e o painel trata a ausencia.
+  alertas?: AlertaAtivoDados[];
 }
