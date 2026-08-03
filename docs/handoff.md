@@ -97,14 +97,63 @@ job: a verdade é recalculada a cada consulta.
 ## Próximos passos (na ordem combinada)
 
 ### 1. Ir ao ar (quando decidir)
-- Rodar o **reset dos dados de teste** (apaga lançamentos, mantém cadastros):
-  `delete from ocorrencias; delete from roteiros; delete from checklists;
-  delete from roteiros_quarentena; delete from manutencoes;
-  update veiculos set status='ATIVO' where status='BLOQUEADO';`
-  e limpar as fotos de teste no Storage.
-- Conferir em `/veiculos` os dados reais de cada veículo (km, revisão, consumo,
-  preço do combustível) — hoje ainda vêm do seed de demonstração.
-- Treinar a equipe: instalar o app (PWA) e usar `/campo`.
+
+**Passo 1 — pré-voo (só leitura).** Saber o que existe antes de apagar:
+
+```sql
+select 'veiculos' as o_que, count(*) as quantos from veiculos
+union all select 'tecnicos ativos',        count(*) from tecnicos where ativo
+union all select 'tecnicos ativos SEM login', count(*) from tecnicos where ativo and user_id is null
+union all select 'roteiros',               count(*) from roteiros
+union all select 'checklists',             count(*) from checklists
+union all select 'manutencoes',            count(*) from manutencoes
+union all select 'ocorrencias',            count(*) from ocorrencias
+union all select 'veiculos fora de ATIVO', count(*) from veiculos where status <> 'ATIVO';
+```
+
+Se `veiculos` vier 0, o painel está exibindo o seed de demonstração e o cadastro
+da frota precisa ser feito antes de tudo. `tecnicos ativos SEM login` maior que
+zero significa técnico que não consegue relatar ocorrência (a tela exige vínculo
+com o usuário logado).
+
+**Passo 2 — reset dos lançamentos** (mantém os cadastros):
+
+```sql
+-- ordem obrigatória: ocorrencias antes de manutencoes (FK manutencao_id)
+delete from ocorrencias;
+delete from roteiros;
+delete from checklists;
+delete from manutencoes;
+
+-- devolve a frota à operação sem ressuscitar o que foi vendido
+update veiculos set status = 'ATIVO' where status in ('BLOQUEADO', 'MANUTENCAO');
+```
+
+Duas armadilhas que este roteiro já teve e não pode ter de volta:
+- **Nada de `delete from roteiros_quarentena`** — essa tabela nunca foi criada
+  (é dívida da Fase 1). No SQL editor cada script roda em uma transação, então
+  a linha inválida aborta e desfaz o reset inteiro, sem avisar direito.
+- **`MANUTENCAO` junto com `BLOQUEADO`** no update. Apagar `manutencoes` sem
+  isso deixa o veículo preso fora da operação, sem nenhuma OS que explique.
+  Se algum veículo estiver **de fato** na oficina, tire-o do update e abra a
+  manutenção real depois.
+
+**Passo 3 — fotos de teste no Storage.** Pelo painel (Storage → bucket →
+selecionar → delete), nos quatro buckets: `checklists`, `roteiros`,
+`manutencoes`, `ocorrencias`. Não apague por SQL em `storage.objects`: isso
+remove o registro e deixa o arquivo órfão no bucket.
+
+**Passo 4 — dados reais em `/veiculos`.** Km atual, próxima revisão, consumo e
+preço do combustível de cada veículo. O **km atual é o mais importante**: toda
+saída é validada contra ele, então um km errado ou trava o técnico no primeiro
+uso ou deixa entrar hodômetro furado.
+
+**Passo 5 — conferir `/alertas`.** Com os dados certos a tela deve ficar quase
+vazia. Se estiver cheia, é sinal de que o passo 4 ficou pela metade — vale
+resolver antes de mostrar para a equipe.
+
+**Passo 6 — equipe.** Instalar o PWA e usar `/campo`. O técnico entra só com o
+usuário (ex.: `igor`); o app completa com `@frota.local`.
 
 ### Ideias mapeadas, ainda não priorizadas
 - Migração dos dados históricos da planilha (`scripts/migrar.ts` nunca foi feito;
