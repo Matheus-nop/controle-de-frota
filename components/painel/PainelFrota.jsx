@@ -31,6 +31,12 @@ export default function PainelFrota({ dados, referencia }) {
   const [view, setView] = useState("operacao");
   const [sel, setSel] = useState(null);
 
+  // Vem pronto da view v_alertas_ativos. Fica vazio enquanto o painel estiver
+  // caindo no seed, e o botao aparece sem contador.
+  const alertas = DADOS.alertas || [];
+  const nAlertas = alertas.length;
+  const nCriticos = alertas.filter((a) => a.gravidade === "CRÍTICO").length;
+
   const m = useMemo(() => {
     const { veiculos, roteiros, manutencoes, custos, checklists } = DADOS;
     const porPlaca = Object.fromEntries(veiculos.map((v) => [v.placa, v]));
@@ -140,6 +146,10 @@ export default function PainelFrota({ dados, referencia }) {
           <a className="btn" href="/checklist">Checklist</a>
                     <a className="btn" href="/manutencao">Manutenção</a>
                     <a className="btn" href="/ocorrencias">Ocorrências</a>
+                    <a className={nCriticos > 0 ? "btn alerta-on" : "btn"} href="/alertas">
+                      Alertas{nAlertas > 0 && <span className="dotn">{nAlertas}</span>}
+                    </a>
+                    <a className="btn" href="/historico">Histórico</a>
                     <a className="btn" href="/veiculos">Veículos</a>
           <a className="btn rel" onClick={() => setView("relatorios")}>↧ Relatórios</a>
         </div>
@@ -393,6 +403,8 @@ function Ficha({ placa, m, onClose }) {
         {chks.length > 0 && <><h4>Checklists</h4>{chks.map((c, i) => (
           <div key={i} className="linha"><span className="mono">{dataBR(c.data)}</span><span className="mute-xs">{c.motivo ? "⚠ " + c.motivo : "OK"}</span><span className="mute-xs ml-auto">{c.cond}</span></div>
         ))}</>}
+
+        <a className="btn ficha-hist" href={"/historico?placa=" + placa}>🖼 Histórico e fotos deste veículo →</a>
       </div>
     </div>
   );
@@ -438,6 +450,8 @@ const CSS = `
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);box-shadow:var(--shadow);text-decoration:none}
 .btn.primary{background:var(--brand);border-color:transparent;color:#fff}
 .btn.rel{margin-left:auto}
+.ficha-hist{width:100%;justify-content:center;margin-top:18px}
+.btn.alerta-on{border-color:var(--crit);color:var(--crit)}
 
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:24px}
 .kpis-3{grid-template-columns:repeat(3,1fr)}

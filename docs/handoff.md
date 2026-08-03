@@ -1,3 +1,4 @@
+
 [handoff.md](https://github.com/user-attachments/files/30517772/handoff.md)
 # Handoff — Controle de Frota (estado atual e próximos passos)
 
@@ -30,6 +31,8 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/checklist` | Checklist semanal (réplica do Google Forms: 7 seções, avaria condicional, bloqueio, fotos) | todos |
 | `/ocorrencia` | Relatar dano/acidente/avaria com foto obrigatória | todos |
 | `/ocorrencias` | Fila de ocorrências: tratar, resolver, virar manutenção | GESTOR |
+| `/historico` | Tudo que a equipe registrou, com as fotos, por veículo e período | GESTOR |
+| `/alertas` | O que precisa de atenção agora, com o botão que resolve cada caso | GESTOR |
 | `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
 | `/login` | Login por usuário + senha | público |
@@ -65,16 +68,35 @@ Tabela `ocorrencias` (migration `0005`) + bucket (`0006`) + prova de RLS em
   dentro da vistoria semanal; a ocorrência acontece a qualquer momento e tem
   vida própria (nasce aberta, morre resolvida).
 
+### Histórico e fotos (feito)
+Rota `/historico`: as três fontes de foto viram uma linha do tempo só.
+- **Checklist** (semanais, avaria, bloqueio) · **roteiro** (painel/hodômetro de
+  saída e chegada) · **ocorrência** (o dano). Sem migration: o dado já existia,
+  faltava onde olhar.
+- Filtro por veículo, período (padrão: últimos 30 dias), tipo de registro e
+  "só com foto". Borda vermelha em checklist não apto, roteiro sem fechamento
+  ou com pendência, e ocorrência grave.
+- A ficha do veículo (modal do painel) manda pra cá com `?placa=XXX`.
+
+### Alertas ativos (feito)
+Migration `0007_alertas_ativos.sql`: a view `v_alertas_ativos` devolve **uma
+linha por problema** — revisão (vencida/próxima), roteiro sem fechamento,
+veículo parado e ocorrência grave em aberto. Nada gravado em tabela, nada de
+job: a verdade é recalculada a cada consulta.
+- Tela `/alertas`, e o botão no painel ganha o contador (fica vermelho quando
+  há crítico). O painel lê a view em `lib/frota/data.ts`; se a migration não
+  tiver rodado, o contador só não aparece.
+- Cada alerta traz o botão que resolve o caso (roteiro → registrar chegada,
+  revisão → abrir manutenção, ocorrência → tratar, parado → histórico).
+- **Veículo que nunca saiu não é "parado", é sem histórico.** A regra exige um
+  roteiro anterior como referência — senão, no dia seguinte ao reset dos dados
+  de teste, a tela nasceria com a frota inteira em alerta.
+- `supabase/tests/alertas_ativos.test.sql` cobre os quatro alertas, os quatro
+  silêncios e o `security_invoker`.
+
 ## Próximos passos (na ordem combinada)
 
-### 1. Histórico de checklists e fotos
-Área do gestor para consultar tudo que a equipe registrou.
-- Ver **checklists por veículo**, com as fotos (semanais, avaria, bloqueio).
-- Ver **fotos dos roteiros** (painel/hodômetro de saída e chegada).
-- Sugestão: rota `/historico` com filtro por veículo e período, e galeria
-  de fotos na ficha do veículo (modal do painel).
-
-### 2. Ir ao ar (quando decidir)
+### 1. Ir ao ar (quando decidir)
 - Rodar o **reset dos dados de teste** (apaga lançamentos, mantém cadastros):
   `delete from ocorrencias; delete from roteiros; delete from checklists;
   delete from roteiros_quarentena; delete from manutencoes;
@@ -87,24 +109,31 @@ Tabela `ocorrencias` (migration `0005`) + bucket (`0006`) + prova de RLS em
 ### Ideias mapeadas, ainda não priorizadas
 - Migração dos dados históricos da planilha (`scripts/migrar.ts` nunca foi feito;
   o painel usa `lib/frota/seed.ts` como fallback quando o banco está vazio).
-- Alertas ativos (revisão vencida, veículo parado, roteiro sem fechamento).
 - Cadastro de CNH/documentos com alerta de vencimento.
 - Registro de abastecimento para custo real (hoje o custo é estimado).
 
 ## Como trabalhar neste projeto
 
-**Importante:** a sessão do Claude Code **não tem permissão de escrita** no
-repositório (todo push dá 403). O fluxo que funciona:
-1. Claude escreve o código e **valida com `npm run build`** no ambiente dele.
-2. Claude entrega o conteúdo do arquivo (ou envia o arquivo).
-3. O gestor cola/sobe pelo **GitHub web** (Create new file / Upload files).
-4. A Vercel faz o deploy sozinha (~2 min).
+**Código: o Claude commita direto.** O 403 relatado nas primeiras sessões era o
+credential helper do git, não o token — `gh auth setup-git` resolve, e o token do
+`gh` tem escopo `repo` (push e admin no repositório). O fluxo:
+1. Claude escreve o código e **valida com `npm run build`**.
+2. Claude commita numa branch `claude/...` e abre PR.
+3. O gestor revisa e faz o merge. A Vercel deploya sozinha (~2 min).
+
+**Banco: continua manual.** Não há credencial do Supabase neste ambiente (a CLI
+não está instalada e não há token). O Claude entrega o `.sql` e o gestor cola no
+SQL editor. Rodar as migrations **antes** de fazer o merge do código que
+depende delas.
+
+**Node não está instalado na máquina.** Para validar o build, baixar o ZIP
+oficial do Node e extrair num caminho **curto** (`%LocalAppData%\Temp\n22`). No
+diretório de scratchpad da sessão o caminho passa dos 260 caracteres do MAX_PATH
+e o npm falha **sem imprimir nada** (por dentro é o resolver de ESM não achando
+o `#ansi-styles` do chalk). O PowerShell também está quebrado nesta máquina
+(erro de .NET Framework) — usar o Bash.
 
 **Armadilhas já encontradas** (evitar repetir):
-- Arquivo baixado repetido ganha `(1)` no nome e sobe duplicado — apagar o
-  antigo dos Downloads antes de baixar.
-- Hífen some do nome do arquivo no upload (`logo-white.png` → `logowhite.png`).
-- "Create new file" dentro de uma subpasta cria o caminho a partir dela.
 - Next.js 16: usar `proxy.ts` (não `middleware.ts` na raiz) — Edge não suporta
   o cliente Supabase.
 - Na Vercel, o Framework Preset precisa estar como **Next.js** (não "Other").

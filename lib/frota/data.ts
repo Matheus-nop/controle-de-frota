@@ -12,6 +12,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { SEED_DADOS } from "./seed";
 import type {
+  AlertaAtivoDados,
   Dados,
   VeiculoDados,
   RoteiroDados,
@@ -164,7 +165,7 @@ export async function carregarDados(): Promise<ResultadoDados> {
       return { dados: SEED_DADOS, fonte: "seed", referencia: referenciaSeed };
     }
 
-    const [veic, rot, cst, man, chk] = await Promise.all([
+    const [veic, rot, cst, man, chk, alr] = await Promise.all([
       supabase.from("veiculos").select("*, responsavel:responsavel_id(nome)"),
       supabase.from("v_roteiros").select("*"),
       supabase.from("v_custo_veiculo").select("*"),
@@ -172,6 +173,9 @@ export async function carregarDados(): Promise<ResultadoDados> {
       supabase
         .from("checklists")
         .select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)"),
+      // Se a migration 0007 ainda nao rodou, isto volta com erro e vira lista
+      // vazia — o painel perde o contador, nao a pagina.
+      supabase.from("v_alertas_ativos").select("*").order("ordem"),
     ]);
 
     const veiculos = (veic.data ?? []).map(mapVeiculo);
@@ -188,6 +192,8 @@ export async function carregarDados(): Promise<ResultadoDados> {
         custos: (cst.data ?? []).map(mapCusto),
         manutencoes: (man.data ?? []).map(mapManutencao),
         checklists: (chk.data ?? []).map(mapChecklist),
+        // sem mapeamento: a view ja devolve no formato da tela
+        alertas: (alr.data ?? []) as AlertaAtivoDados[],
       },
       fonte: "supabase",
       referencia: hoje,
