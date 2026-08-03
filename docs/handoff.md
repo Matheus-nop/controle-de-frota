@@ -109,7 +109,6 @@ job: a verdade é recalculada a cada consulta.
 ### Ideias mapeadas, ainda não priorizadas
 - Migração dos dados históricos da planilha (`scripts/migrar.ts` nunca foi feito;
   o painel usa `lib/frota/seed.ts` como fallback quando o banco está vazio).
-- Alertas ativos (revisão vencida, veículo parado, roteiro sem fechamento).
 - Cadastro de CNH/documentos com alerta de vencimento.
 - Registro de abastecimento para custo real (hoje o custo é estimado).
 
