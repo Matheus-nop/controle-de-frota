@@ -140,6 +140,7 @@ export default function PainelFrota({ dados, referencia }) {
           <a className="btn" href="/checklist">Checklist</a>
                     <a className="btn" href="/manutencao">Manutenção</a>
                     <a className="btn" href="/ocorrencias">Ocorrências</a>
+                    <a className="btn" href="/historico">Histórico</a>
                     <a className="btn" href="/veiculos">Veículos</a>
           <a className="btn rel" onClick={() => setView("relatorios")}>↧ Relatórios</a>
         </div>
@@ -393,6 +394,8 @@ function Ficha({ placa, m, onClose }) {
         {chks.length > 0 && <><h4>Checklists</h4>{chks.map((c, i) => (
           <div key={i} className="linha"><span className="mono">{dataBR(c.data)}</span><span className="mute-xs">{c.motivo ? "⚠ " + c.motivo : "OK"}</span><span className="mute-xs ml-auto">{c.cond}</span></div>
         ))}</>}
+
+        <a className="btn ficha-hist" href={"/historico?placa=" + placa}>🖼 Histórico e fotos deste veículo →</a>
       </div>
     </div>
   );
@@ -438,6 +441,7 @@ const CSS = `
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);box-shadow:var(--shadow);text-decoration:none}
 .btn.primary{background:var(--brand);border-color:transparent;color:#fff}
 .btn.rel{margin-left:auto}
+.ficha-hist{width:100%;justify-content:center;margin-top:18px}
 
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:24px}
 .kpis-3{grid-template-columns:repeat(3,1fr)}

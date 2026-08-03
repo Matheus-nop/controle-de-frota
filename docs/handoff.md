@@ -31,6 +31,7 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/checklist` | Checklist semanal (réplica do Google Forms: 7 seções, avaria condicional, bloqueio, fotos) | todos |
 | `/ocorrencia` | Relatar dano/acidente/avaria com foto obrigatória | todos |
 | `/ocorrencias` | Fila de ocorrências: tratar, resolver, virar manutenção | GESTOR |
+| `/historico` | Tudo que a equipe registrou, com as fotos, por veículo e período | GESTOR |
 | `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
 | `/login` | Login por usuário + senha | público |
@@ -66,16 +67,19 @@ Tabela `ocorrencias` (migration `0005`) + bucket (`0006`) + prova de RLS em
   dentro da vistoria semanal; a ocorrência acontece a qualquer momento e tem
   vida própria (nasce aberta, morre resolvida).
 
+### Histórico e fotos (feito)
+Rota `/historico`: as três fontes de foto viram uma linha do tempo só.
+- **Checklist** (semanais, avaria, bloqueio) · **roteiro** (painel/hodômetro de
+  saída e chegada) · **ocorrência** (o dano). Sem migration: o dado já existia,
+  faltava onde olhar.
+- Filtro por veículo, período (padrão: últimos 30 dias), tipo de registro e
+  "só com foto". Borda vermelha em checklist não apto, roteiro sem fechamento
+  ou com pendência, e ocorrência grave.
+- A ficha do veículo (modal do painel) manda pra cá com `?placa=XXX`.
+
 ## Próximos passos (na ordem combinada)
 
-### 1. Histórico de checklists e fotos
-Área do gestor para consultar tudo que a equipe registrou.
-- Ver **checklists por veículo**, com as fotos (semanais, avaria, bloqueio).
-- Ver **fotos dos roteiros** (painel/hodômetro de saída e chegada).
-- Sugestão: rota `/historico` com filtro por veículo e período, e galeria
-  de fotos na ficha do veículo (modal do painel).
-
-### 2. Ir ao ar (quando decidir)
+### 1. Ir ao ar (quando decidir)
 - Rodar o **reset dos dados de teste** (apaga lançamentos, mantém cadastros):
   `delete from ocorrencias; delete from roteiros; delete from checklists;
   delete from roteiros_quarentena; delete from manutencoes;
