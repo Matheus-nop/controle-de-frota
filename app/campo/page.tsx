@@ -51,6 +51,7 @@ export default function CampoPage() {
     { href: "/roteiro/saida", emoji: "📤", titulo: "Registrar saída", sub: "Vou pegar um veículo", cor: "#2B4C8C" },
     { href: "/roteiro/chegada", emoji: "📥", titulo: "Registrar chegada", sub: "Voltei / fechar roteiro", cor: "#1B9E6B" },
     { href: "/checklist", emoji: "✅", titulo: "Checklist do veículo", sub: "Vistoria semanal", cor: "#0E2544" },
+    { href: "/ocorrencia", emoji: "⚠️", titulo: "Relatar ocorrência", sub: "Dano, acidente ou avaria", cor: "#C0392B" },
   ];
 
   return (

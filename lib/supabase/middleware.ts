@@ -5,7 +5,9 @@ import { NextResponse, type NextRequest } from "next/server";
 const ROTAS_PUBLICAS = ["/login", "/auth", "/api/health"];
 
 // Rotas exclusivas do GESTOR. Tecnico que tentar entrar volta para /campo.
-const ROTAS_GESTOR = ["/veiculos"];
+// Atencao: /ocorrencia (singular, o relato do tecnico) NAO entra aqui — quem
+// e do gestor e a fila /ocorrencias (plural).
+const ROTAS_GESTOR = ["/veiculos", "/ocorrencias"];
 
 // A raiz "/" e o painel do gestor; o tecnico e mandado para /campo.
 export async function updateSession(request: NextRequest) {
