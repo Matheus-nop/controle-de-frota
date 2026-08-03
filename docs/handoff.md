@@ -1,4 +1,3 @@
-
 [handoff.md](https://github.com/user-attachments/files/30517772/handoff.md)
 # Handoff — Controle de Frota (estado atual e próximos passos)
 
@@ -29,6 +28,8 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/roteiro/saida` | Registrar saída (valida km, um roteiro aberto por veículo, foto do painel) | todos |
 | `/roteiro/chegada` | Registrar chegada (valida km ≥ saída e ≤ 600, pendência, foto) | todos |
 | `/checklist` | Checklist semanal (réplica do Google Forms: 7 seções, avaria condicional, bloqueio, fotos) | todos |
+| `/ocorrencia` | Relatar dano/acidente/avaria com foto obrigatória | todos |
+| `/ocorrencias` | Fila de ocorrências: tratar, resolver, virar manutenção | GESTOR |
 | `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
 | `/login` | Login por usuário + senha | público |
@@ -47,29 +48,37 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 
 ### Storage (buckets públicos)
 `checklists` (fotos do checklist) · `roteiros` (foto do painel/hodômetro) ·
-`manutencoes` (nota fiscal). Policy de INSERT para `authenticated` em cada um.
+`manutencoes` (nota fiscal) · `ocorrencias` (fotos do dano). Policy de INSERT
+para `authenticated` em cada um.
+
+### Ocorrências (feito)
+Tabela `ocorrencias` (migration `0005`) + bucket (`0006`) + prova de RLS em
+`supabase/tests/rls_ocorrencias.test.sql`.
+- O técnico relata em `/ocorrencia`: veículo, tipo, gravidade, descrição e
+  **foto obrigatória**. O relato sai sempre no nome de quem está logado — é o
+  que a RLS deixa gravar.
+- O gestor trata em `/ocorrencias`: muda status, escreve a resolução e tem o
+  botão **"Abrir manutenção desta ocorrência"**, que cria a OS já preenchida
+  (origem `ACIDENTE/AVARIA`, prioridade vinda da gravidade) e guarda o vínculo
+  em `ocorrencias.manutencao_id`.
+- Diferença de propósito para o checklist: a avaria do checklist é uma resposta
+  dentro da vistoria semanal; a ocorrência acontece a qualquer momento e tem
+  vida própria (nasce aberta, morre resolvida).
 
 ## Próximos passos (na ordem combinada)
 
-### 1. Ocorrências (dano / acidente) — PRÓXIMO
-Técnico relata ocorrência no veículo pelo app de campo, com foto.
-- Migration nova: tabela `ocorrencias` (veiculo_id, tecnico_id, tipo
-  [DANO/ACIDENTE/AVARIA/OUTRO], data, descricao, gravidade, fotos jsonb,
-  status, resolvida_em) + RLS no mesmo modelo de `roteiros`.
-- Tela `/ocorrencia` (registro, com câmera) e entrada na tela `/campo`.
-- Ocorrência grave deve poder virar manutenção (link para `/manutencao`).
-
-### 2. Histórico de checklists e fotos
+### 1. Histórico de checklists e fotos
 Área do gestor para consultar tudo que a equipe registrou.
 - Ver **checklists por veículo**, com as fotos (semanais, avaria, bloqueio).
 - Ver **fotos dos roteiros** (painel/hodômetro de saída e chegada).
 - Sugestão: rota `/historico` com filtro por veículo e período, e galeria
   de fotos na ficha do veículo (modal do painel).
 
-### 3. Ir ao ar (quando decidir)
+### 2. Ir ao ar (quando decidir)
 - Rodar o **reset dos dados de teste** (apaga lançamentos, mantém cadastros):
-  `delete from roteiros; delete from checklists; delete from roteiros_quarentena;
-  delete from manutencoes; update veiculos set status='ATIVO' where status='BLOQUEADO';`
+  `delete from ocorrencias; delete from roteiros; delete from checklists;
+  delete from roteiros_quarentena; delete from manutencoes;
+  update veiculos set status='ATIVO' where status='BLOQUEADO';`
   e limpar as fotos de teste no Storage.
 - Conferir em `/veiculos` os dados reais de cada veículo (km, revisão, consumo,
   preço do combustível) — hoje ainda vêm do seed de demonstração.
