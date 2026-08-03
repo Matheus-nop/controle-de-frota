@@ -22,8 +22,10 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 - Não use "viagem", "corrida", "motorista", "driver", "trip". A equipe não fala assim.
 
 ## Estado
-- [x] Fase 1 — schema e migração
+- [x] Fase 1 — schema (a migração dos dados da planilha continua pendente)
 - [x] Fase 2 — auth e RLS
-- [ ] Fase 3 — painel
-- [ ] Fase 4 — PWA de campo
-- [ ] Fase 5 — automações
+- [x] Fase 3 — painel
+- [x] Fase 4 — PWA de campo
+- [~] Fase 5 — automações (km automático, bloqueio por checklist, alertas ativos)
+
+Detalhe do estado atual e próximos passos: `docs/handoff.md`.
