@@ -98,6 +98,15 @@ job: a verdade é recalculada a cada consulta.
 
 ### 1. Ir ao ar (quando decidir)
 
+**A ordem importa mais que os passos.** O reset apaga lançamentos; a migração
+insere lançamentos. Migrar e limpar depois joga fora o histórico que acabou de
+entrar. A sequência abaixo já está na ordem segura: pré-voo → reset → migração
+→ dados dos veículos → equipe.
+
+**Passo 0 — corte da planilha.** Avisar a equipe que a planilha parou e que a
+partir dali é o app. Sem esse corte, entram lançamentos na planilha depois da
+exportação e eles se perdem.
+
 **Passo 1 — pré-voo (só leitura).** Saber o que existe antes de apagar:
 
 ```sql
@@ -143,6 +152,23 @@ selecionar → delete), nos quatro buckets: `checklists`, `roteiros`,
 `manutencoes`, `ocorrencias`. Não apague por SQL em `storage.objects`: isso
 remove o registro e deixa o arquivo órfão no bucket.
 
+**Passo 3.5 — migrar o histórico da planilha.** Fecha a dívida da Fase 1.
+
+1. Aplicar `0008_roteiros_quarentena.sql` (uma vez só).
+2. Baixar a planilha do Google Sheets em `.xlsx` (Arquivo → Fazer download →
+   Microsoft Excel) por cima de `dados-origem/CONTROLE_DE_FROTA.xlsx`. O export
+   do Google traz **valores**, não fórmulas — verificado, o script lê direto.
+3. `node scripts/migrar.mjs` (precisa de `npm install` antes; se não houver Node
+   na máquina, o Claude roda com o Node portátil apontando para o arquivo).
+4. **Ler o relatório.** Se listar "NOMES NAO MAPEADOS", alguém novo apareceu:
+   decidir quem é e acrescentar ao mapa `TECNICOS` no topo do script antes de
+   aplicar. O script nunca inventa pessoa — nome desconhecido vira quarentena.
+5. Colar o `dados-origem/historico.sql` gerado no SQL editor.
+
+O SQL é idempotente: rodar duas vezes não duplica. Números da planilha de
+17/07, como referência do que esperar: 237 roteiros, 49 em quarentena, 10
+técnicos, 32.571 km.
+
 **Passo 4 — dados reais em `/veiculos`.** Km atual, próxima revisão, consumo e
 preço do combustível de cada veículo. O **km atual é o mais importante**: toda
 saída é validada contra ele, então um km errado ou trava o técnico no primeiro
@@ -156,8 +182,16 @@ resolver antes de mostrar para a equipe.
 usuário (ex.: `igor`); o app completa com `@frota.local`.
 
 ### Ideias mapeadas, ainda não priorizadas
-- Migração dos dados históricos da planilha (`scripts/migrar.ts` nunca foi feito;
-  o painel usa `lib/frota/seed.ts` como fallback quando o banco está vazio).
+- **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
+  2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
+  apontando para `RESPOSTAS_ROTEIRO`; 274 dos 276 têm link), mas o link é de
+  página do Drive e não de imagem — gravar direto faria a `/historico` mostrar
+  274 imagens quebradas. Para trazer de verdade: baixar via
+  `drive.google.com/uc?export=download&id=<ID>` e subir no bucket `roteiros`.
+  O cabeçalho de `scripts/migrar.mjs` guarda o caminho completo.
+- **Aba "Pendências" do painel lendo `roteiros_quarentena`.** A tabela existe e
+  é populada pela migração, mas nenhuma tela mostra ainda. Hoje se consulta por
+  SQL.
 - Cadastro de CNH/documentos com alerta de vencimento.
 - Registro de abastecimento para custo real (hoje o custo é estimado).
 
