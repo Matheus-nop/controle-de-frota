@@ -10,6 +10,8 @@ node_modules/
 # config local do Claude Code (por maquina, nao compartilhar)
 .claude/settings.local.json
 
-# a planilha de origem tem nome de tecnico e historico interno.
-# migre e apague - nao versione.
-dados-origem/*.xlsx
+# A planilha de origem tem nome de tecnico e historico interno.
+# A pasta INTEIRA fica de fora, nao so o .xlsx: a migracao gera aqui os mapas
+# de deduplicacao e o SQL do historico, e esses arquivos carregam os mesmos
+# nomes. O repositorio e publico.
+dados-origem/
