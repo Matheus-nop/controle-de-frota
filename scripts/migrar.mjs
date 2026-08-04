@@ -14,6 +14,20 @@
 //
 // Idempotente: cada roteiro carrega a chave ID_AUTO da planilha e so entra se
 // aquela chave ainda nao existir. Rodar duas vezes nao duplica nada.
+//
+// FOTOS HISTORICAS: nao migram, por decisao do gestor em 2026-08-03.
+// Elas existem — a KM_DIARIO guarda LINHA_SAIDA/LINHA_CHEGADA apontando para a
+// aba RESPOSTAS_ROTEIRO, e de la sai a foto do painel de 274 dos 276 roteiros.
+// O problema e o formato: "https://drive.google.com/open?id=..." e pagina do
+// Drive, nao imagem. Gravar isso em foto_painel_saida faria a tela /historico
+// renderizar 274 imagens quebradas, que passa a impressao de sistema com
+// defeito — pior do que assumir que o roteiro antigo nao tem foto.
+//
+// Para trazer as fotos de verdade um dia: baixar cada uma via
+// "https://drive.google.com/uc?export=download&id=<ID>" (exige acesso
+// autenticado ao Drive) e subir no bucket `roteiros` do Storage. E trabalho a
+// parte, e so vale a pena se aparecer a necessidade real de consultar foto de
+// roteiro antigo.
 
 import XLSX from "xlsx";
 import { writeFileSync } from "node:fs";
