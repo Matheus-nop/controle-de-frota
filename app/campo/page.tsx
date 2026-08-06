@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { horaDe } from "@/lib/frota/tempo";
 
 type Aberto = {
   id: string;
@@ -44,7 +45,7 @@ export default function CampoPage() {
   }, []);
 
   function hora(s: string) {
-    return s.includes("T") ? s.split("T")[1].slice(0, 5) : "";
+    return horaDe(s) ?? "";
   }
 
   const acoes = [

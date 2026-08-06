@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { hojeBR } from "@/lib/frota/tempo";
 
 type Ocorrencia = {
   id: string;
@@ -152,9 +153,7 @@ function OcorrenciaCard({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) 
         .update({
           status,
           resolucao: resolucao.trim() || null,
-          resolvida_em: encerrando
-            ? (o.resolvida_em ?? new Date().toISOString().slice(0, 10))
-            : null,
+          resolvida_em: encerrando ? (o.resolvida_em ?? hojeBR()) : null,
         })
         .eq("id", o.id);
       if (error) throw error;

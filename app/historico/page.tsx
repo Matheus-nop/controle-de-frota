@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { diaDe, diaISO, intervaloUTC } from "@/lib/frota/tempo";
 
 // Consulta do gestor: tudo que a equipe registrou, com as fotos. As tres fontes
 // de foto que ja existem viram uma linha do tempo so — checklist (semanais,
@@ -41,9 +42,6 @@ function one<T>(rel: T | T[] | null): T | null {
 }
 function dataBR(s: string | null) {
   return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : "—";
-}
-function diaISO(d: Date) {
-  return d.toISOString().slice(0, 10);
 }
 // Aceita so o que parece URL: o jsonb e livre e ja passou por versoes diferentes
 // do formulario.
@@ -98,11 +96,14 @@ export default function HistoricoPage() {
       .select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)")
       .gte("data", de)
       .lte("data", ate);
+    // `saida_em` e timestamptz: o recorte precisa ser o dia de Sao Paulo virado
+    // em UTC, senao o filtro corta as 21h e some com o roteiro das 22h.
+    const janela = intervaloUTC(de, ate);
     let qRot = supabase
       .from("v_roteiros")
       .select("*")
-      .gte("saida_em", de)
-      .lte("saida_em", ate + "T23:59:59");
+      .gte("saida_em", janela.de)
+      .lte("saida_em", janela.ate);
     let qOco = supabase
       .from("ocorrencias")
       .select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)")
@@ -157,7 +158,7 @@ export default function HistoricoPage() {
       linhas.push({
         id: "rot-" + r.id,
         tipo: "ROTEIRO",
-        data: (r.saida_em ?? "").slice(0, 10),
+        data: diaDe(r.saida_em) ?? "",
         placa: r.placa ?? "—",
         modelo: r.modelo ?? "",
         tecnico: r.tecnico_saida ?? "—",

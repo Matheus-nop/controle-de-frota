@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { hojeBR } from "@/lib/frota/tempo";
 
 type Veiculo = { id: string; placa: string; modelo: string; status: string };
 type Tecnico = { id: string; nome: string };
@@ -128,7 +129,7 @@ export default function ChecklistPage() {
       const { error } = await supabase.from("checklists").insert({
         veiculo_id: veiculoId,
         tecnico_id: condutorId,
-        data: data || new Date().toISOString().slice(0, 10),
+        data: data || hojeBR(),
         km_atual: parseInt(km, 10),
         itens,
         apto: apto === "SIM",

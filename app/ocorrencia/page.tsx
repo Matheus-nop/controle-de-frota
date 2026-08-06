@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { hojeBR } from "@/lib/frota/tempo";
 
 type Veiculo = { id: string; placa: string; modelo: string; status: string };
 type Tecnico = { id: string; nome: string };
@@ -27,7 +28,7 @@ export default function OcorrenciaPage() {
   const [ehGestor, setEhGestor] = useState(false);
   const [carregando, setCarregando] = useState(true);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const [veiculoId, setVeiculoId] = useState("");
   const [tecnicoId, setTecnicoId] = useState("");

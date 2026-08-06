@@ -11,6 +11,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { SEED_DADOS } from "./seed";
+import { diaDe, horaDe, hojeBR } from "./tempo";
 import type {
   AlertaAtivoDados,
   Dados,
@@ -36,14 +37,13 @@ function one(rel: any): any {
   return Array.isArray(rel) ? rel[0] : rel;
 }
 
+// O banco devolve UTC; a equipe lê em São Paulo. Ver lib/frota/tempo.ts.
 function datePart(ts?: string | null): string | null {
-  return ts ? ts.slice(0, 10) : null;
+  return diaDe(ts);
 }
 
 function timePart(ts?: string | null): string | null {
-  if (!ts) return null;
-  const t = ts.includes("T") ? ts.split("T")[1] : ts.slice(11);
-  return t ? t.slice(0, 5) : null;
+  return horaDe(ts);
 }
 
 function veicLabel(modelo?: string | null, placa?: string | null): string {
@@ -152,7 +152,7 @@ function mapChecklist(row: any): ChecklistDados {
 export async function carregarDados(): Promise<ResultadoDados> {
   // referencia nativa do seed, para o painel de demonstracao renderizar fiel.
   const referenciaSeed = "2026-07-17";
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   try {
     const supabase = await createClient();
