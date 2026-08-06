@@ -94,6 +94,23 @@ job: a verdade é recalculada a cada consulta.
 - `supabase/tests/alertas_ativos.test.sql` cobre os quatro alertas, os quatro
   silêncios e o `security_invoker`.
 
+### Fuso horário (feito no app, **migration pendente no banco**)
+O banco guarda `timestamptz` (UTC) e tudo era datado em UTC — 3h adiantado, e o
+lançamento da noite caía no dia seguinte. Corrigido em dois andares:
+- **App:** `lib/frota/tempo.ts` (`diaDe`, `horaDe`, `diaHoraDe`, `hojeBR`,
+  `diaISO`, `intervaloUTC`), com `Intl.DateTimeFormat` em `America/Sao_Paulo` —
+  zona nomeada, não offset `-3`, para o horário de verão se ajustar sozinho.
+  Já mergeado.
+- **Banco:** `0009_fuso_horario.sql` cria `dia_br()`/`hoje_br()` e refaz
+  `v_roteiros.situacao` e `v_alertas_ativos`, que faziam `::date` em UTC.
+  **Colar no SQL editor.** Sem ela, das 21h à meia-noite todo veículo na rua
+  vira "roteiro sem fechamento" (alerta crítico) e a coluna
+  "CONCLUÍDO - DIA SEGUINTE" acusa quem voltou às 23h do mesmo dia e cala sobre
+  quem virou a noite de verdade.
+- Não há ordem obrigatória entre os dois: o código não depende da migration.
+- `supabase/tests/fuso_horario.test.sql` prova os dois andares. Contra as views
+  antigas ele falha em 3 das 8 asserções — é o que faz dele teste.
+
 ## Próximos passos (na ordem combinada)
 
 ### 1. Ir ao ar (quando decidir)
