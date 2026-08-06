@@ -173,6 +173,12 @@ remove o registro e deixa o arquivo órfão no bucket.
 
 **Passo 3.5 — migrar o histórico da planilha.** Fecha a dívida da Fase 1.
 
+> **A equipe já está no app (desde 2026-08-06).** O reset do Passo 2 apaga
+> lançamento real agora — **não rode o Passo 2**. A migração é aditiva e
+> idempotente (chave `ID_AUTO`), então ela entra junto do que a equipe já
+> lançou, sem apagar nada e sem duplicar se rodar duas vezes.
+
+
 1. Aplicar `0008_roteiros_quarentena.sql` (uma vez só).
 2. Baixar a planilha do Google Sheets em `.xlsx` (Arquivo → Fazer download →
    Microsoft Excel) por cima de `dados-origem/CONTROLE_DE_FROTA.xlsx`. O export
@@ -184,9 +190,19 @@ remove o registro e deixa o arquivo órfão no bucket.
    aplicar. O script nunca inventa pessoa — nome desconhecido vira quarentena.
 5. Colar o `dados-origem/historico.sql` gerado no SQL editor.
 
-O SQL é idempotente: rodar duas vezes não duplica. Números da planilha de
-17/07, como referência do que esperar: 237 roteiros, 49 em quarentena, 10
-técnicos, 32.571 km.
+O SQL é idempotente: rodar duas vezes não duplica. Números do export de
+2026-08-04, como referência do que esperar: **303 roteiros limpos, 65 em
+quarentena, 79 checklists, 6 manutenções, 10 técnicos.**
+
+**O `migrar.mjs` teve três correções em 2026-08-06** (PR #14) que mudam o que
+sai do mesmo arquivo — se você tem um `historico.sql` antigo em
+`dados-origem/`, gere de novo antes de colar:
+- A data era lida do texto da célula assumindo `M/D/A`. O Google exporta
+  `D/M/A`, então dia virava mês. Agora lê o serial do Excel, que não tem
+  ambiguidade nem locale.
+- `valor_final` (`numeric(10,2)`) passava por `inteiro()`, que come o ponto:
+  R$ 301,80 virava R$ 3.018. Três manutenções estavam 10× infladas.
+- O script não gerava checklists nem manutenções — só roteiros e quarentena.
 
 **Passo 4 — dados reais em `/veiculos`.** Km atual, próxima revisão, consumo e
 preço do combustível de cada veículo. O **km atual é o mais importante**: toda
