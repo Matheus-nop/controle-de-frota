@@ -94,22 +94,66 @@ const inteiro = (v) => {
   return Number.isNaN(n) ? null : n;
 };
 
-// "5/18/26" -> "2026-05-18". Devolve null se nao der para confiar.
-function dataISO(v) {
-  if (!v) return null;
-  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (!m) return null;
-  let [, mes, dia, ano] = m;
-  ano = ano.length === 2 ? "20" + ano : ano;
-  if (ano.length !== 4 || +ano < 2020 || +ano > 2030) return null;
-  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+// ---------------------------------------------------------------------------
+// Data e hora: le o SERIAL do Excel, nunca o texto ao lado dele.
+//
+// Na planilha a celula de data e um numero (46160 = 18/05/2026). O texto que
+// aparece na tela e so um formato, e o formato segue o locale de quem exportou:
+// o Google escreve "18/05/2026", exports antigos vinham "5/18/26". Ler o texto
+// obriga a adivinhar a ordem, e adivinhar errado NAO da erro — "05/06/2026"
+// vira 6 de maio em vez de 5 de junho, calado, em toda linha do ano cujo dia
+// seja <= 12. Foi o que aconteceu: o script assumia M/D/A e a planilha passou
+// a sair D/M/A.
+//
+// parse_date_code devolve os componentes do calendario direto do serial, sem
+// passar por Date e portanto sem fuso — converter serial via Date recuaria um
+// dia inteiro em UTC-3, que e o mesmo bug de lib/frota/tempo.ts.
+// ---------------------------------------------------------------------------
+
+// quantas celulas cairam no caminho de texto (nao deveria acontecer)
+let dataPorTexto = 0;
+
+function serial(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return XLSX.SSF.parse_date_code(v);
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    // cellDates ja converteu: usa os componentes LOCAIS, nunca toISOString
+    return { y: v.getFullYear(), m: v.getMonth() + 1, d: v.getDate(),
+             H: v.getHours(), M: v.getMinutes(), S: v.getSeconds() };
+  }
+  return null;
 }
 
-// "8:55" / "4:34:00 PM" -> "08:55:00"
+const dd = (n) => String(n).padStart(2, "0");
+
+// 46160 -> "2026-05-18". Devolve null se nao der para confiar.
+function dataISO(v) {
+  if (v == null || v === "") return null;
+  const c = serial(v);
+  if (c) {
+    if (!c.y || c.y < 2020 || c.y > 2030) return null;
+    return `${c.y}-${dd(c.m)}-${dd(c.d)}`;
+  }
+  // Sobra: planilha exportada com a data como texto. Ambiguo por natureza,
+  // entao so aceita quando o proprio valor desfaz a duvida (dia > 12).
+  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  let [, a, b, ano] = m;
+  ano = ano.length === 2 ? "20" + ano : ano;
+  if (ano.length !== 4 || +ano < 2020 || +ano > 2030) return null;
+  let dia, mes;
+  if (+a > 12 && +b <= 12) { dia = a; mes = b; }        // 18/05 -> D/M
+  else if (+b > 12 && +a <= 12) { mes = a; dia = b; }   // 05/18 -> M/D
+  else return null;                                     // 05/06: nao da para saber
+  dataPorTexto++;
+  return `${ano}-${dd(mes)}-${dd(dia)}`;
+}
+
+// 0.3715 (fracao do dia) / "8:55" / "4:34:00 PM" -> "08:55:00"
 function horaISO(v) {
-  if (!v) return "00:00:00";
-  const s = String(v).trim();
-  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (v == null || v === "") return "00:00:00";
+  const c = serial(v);
+  if (c) return `${dd(c.H)}:${dd(c.M)}:${dd(c.S)}`;
+  const m = String(v).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
   if (!m) return "00:00:00";
   let h = +m[1];
   const min = m[2];
@@ -117,7 +161,7 @@ function horaISO(v) {
   const ampm = (m[4] || "").toUpperCase();
   if (ampm === "PM" && h < 12) h += 12;
   if (ampm === "AM" && h === 12) h = 0;
-  return `${String(h).padStart(2, "0")}:${min}:${seg}`;
+  return `${dd(h)}:${min}:${seg}`;
 }
 
 const ts = (d, h) => (d ? `${d} ${horaISO(h)}` : null);
@@ -155,8 +199,10 @@ function resolverTecnico(bruto) {
 // ---------------------------------------------------------------------------
 // leitura
 // ---------------------------------------------------------------------------
-const wb = XLSX.readFile(ENTRADA, { cellDates: true });
-const ler = (aba) => XLSX.utils.sheet_to_json(wb.Sheets[aba], { defval: null, raw: false });
+// raw: true de proposito — queremos o valor da celula, nao o texto formatado.
+// Data e hora dependem disso (ver dataISO); o resto e texto e nao muda.
+const wb = XLSX.readFile(ENTRADA);
+const ler = (aba) => XLSX.utils.sheet_to_json(wb.Sheets[aba], { defval: null, raw: true });
 
 const roteiros = ler("KM_DIARIO");
 
@@ -336,6 +382,14 @@ for (const r of quarentena) for (const m of r.motivos) porMotivo[m] = (porMotivo
 for (const [m, n] of Object.entries(porMotivo).sort((a, b) => b[1] - a[1])) {
   console.log("   " + String(n).padStart(4) + "x  " + m);
 }
+console.log("");
+if (dataPorTexto) {
+  console.log("");
+  console.log(`ATENCAO: ${dataPorTexto} data(s) vieram como TEXTO, nao como`);
+  console.log("serial do Excel. Foram lidas pela ordem do proprio valor (dia > 12),");
+  console.log("e as ambiguas viraram quarentena. Confira uma linha antes de aplicar.");
+}
+
 console.log("");
 console.log("pessoas que o SQL vai garantir em tecnicos:", pessoas.size);
 for (const p of [...pessoas].sort()) console.log("   - " + p);
