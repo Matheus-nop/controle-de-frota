@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { hojeBR } from "@/lib/frota/tempo";
 
 type Veiculo = { id: string; placa: string; modelo: string };
 type Tecnico = { id: string; nome: string };
@@ -202,7 +203,7 @@ function ManutCard({ m, tecnicos, onSalvo }: { m: Manut; tecnicos: Tecnico[]; on
           pecas_trocadas: pecas.trim() || null,
           proxima_revisao_km: intOrNull(proxRev),
           responsavel_id: resp || null,
-          concluida_em: concluindo ? (m.concluida_em ?? new Date().toISOString().slice(0, 10)) : null,
+          concluida_em: concluindo ? (m.concluida_em ?? hojeBR()) : null,
           nota_fiscal_url: nfUrl,
         })
         .eq("id", m.id);

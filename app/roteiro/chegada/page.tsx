@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { diaHoraDe } from "@/lib/frota/tempo";
 
 type Aberto = {
   id: string;
@@ -147,9 +148,7 @@ export default function RegistrarChegadaPage() {
   const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "#101A26" };
 
   function dataHora(s: string) {
-    const d = s.slice(8, 10) + "/" + s.slice(5, 7);
-    const h = s.includes("T") ? s.split("T")[1].slice(0, 5) : "";
-    return `${d} ${h}`.trim();
+    return diaHoraDe(s) ?? "";
   }
 
   return (
