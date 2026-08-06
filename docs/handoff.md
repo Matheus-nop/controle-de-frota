@@ -109,7 +109,8 @@ lançamento da noite caía no dia seguinte. Corrigido em dois andares:
   quem virou a noite de verdade.
 - Não há ordem obrigatória entre os dois: o código não depende da migration.
 - `supabase/tests/fuso_horario.test.sql` prova os dois andares. Contra as views
-  antigas ele falha em 3 das 8 asserções — é o que faz dele teste.
+  antigas ele falha em 3 das 8 asserções — é o que faz dele teste. **Não vai no
+  SQL editor** (ver abaixo).
 
 ## Próximos passos (na ordem combinada)
 
@@ -225,6 +226,13 @@ credential helper do git, não o token — `gh auth setup-git` resolve, e o toke
 não está instalada e não há token). O Claude entrega o `.sql` e o gestor cola no
 SQL editor. Rodar as migrations **antes** de fazer o merge do código que
 depende delas.
+
+**Só `supabase/migrations/` vai no SQL editor.** `supabase/tests/` é pgTAP, que
+não está instalado no projeto — colar um `.test.sql` lá responde `function
+plan(integer) does not exist` e não faz nada (aconteceu em 2026-08-06 com o
+`fuso_horario.test.sql`). Os testes rodam com `supabase test db`, ou no PG
+portátil local. Se um deles for colado por engano, não há estrago a desfazer: o
+erro aborta antes de qualquer escrita, e o arquivo inteiro é `begin/rollback`.
 
 **Node não está instalado na máquina.** Para validar o build, baixar o ZIP
 oficial do Node e extrair num caminho **curto** (`%LocalAppData%\Temp\n22`). No

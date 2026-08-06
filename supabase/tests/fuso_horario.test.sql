@@ -1,5 +1,10 @@
 -- Fuso horario (0009): prova que as views datam pelo relogio de Sao Paulo.
--- Roda com: supabase test db
+--
+-- NAO COLE ESTE ARQUIVO NO SQL EDITOR DO SUPABASE. `plan`, `is` e `finish` sao
+-- funcoes do pgTAP, que nao esta instalado la — o editor responde "function
+-- plan(integer) does not exist". Quem vai no SQL editor e a MIGRATION
+-- (supabase/migrations/0009_fuso_horario.sql). Este arquivo roda com
+-- `supabase test db`, ou num PG local (ver docs/handoff.md).
 --
 -- O banco guarda instante (timestamptz). "Em que DIA isso aconteceu?" so tem
 -- resposta com um fuso, e o fuso da sessao no Supabase e UTC. Entre 21h e a
