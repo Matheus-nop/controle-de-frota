@@ -94,20 +94,21 @@ job: a verdade é recalculada a cada consulta.
 - `supabase/tests/alertas_ativos.test.sql` cobre os quatro alertas, os quatro
   silêncios e o `security_invoker`.
 
-### Fuso horário (feito no app, **migration pendente no banco**)
+### Fuso horário (feito)
 O banco guarda `timestamptz` (UTC) e tudo era datado em UTC — 3h adiantado, e o
 lançamento da noite caía no dia seguinte. Corrigido em dois andares:
 - **App:** `lib/frota/tempo.ts` (`diaDe`, `horaDe`, `diaHoraDe`, `hojeBR`,
   `diaISO`, `intervaloUTC`), com `Intl.DateTimeFormat` em `America/Sao_Paulo` —
   zona nomeada, não offset `-3`, para o horário de verão se ajustar sozinho.
-  Já mergeado.
 - **Banco:** `0009_fuso_horario.sql` cria `dia_br()`/`hoje_br()` e refaz
   `v_roteiros.situacao` e `v_alertas_ativos`, que faziam `::date` em UTC.
-  **Colar no SQL editor.** Sem ela, das 21h à meia-noite todo veículo na rua
-  vira "roteiro sem fechamento" (alerta crítico) e a coluna
-  "CONCLUÍDO - DIA SEGUINTE" acusa quem voltou às 23h do mesmo dia e cala sobre
-  quem virou a noite de verdade.
-- Não há ordem obrigatória entre os dois: o código não depende da migration.
+  **Aplicada em produção em 2026-08-06.** Sem ela, das 21h à meia-noite todo
+  veículo na rua virava "roteiro sem fechamento" (alerta crítico) e a coluna
+  "CONCLUÍDO - DIA SEGUINTE" acusava quem voltou às 23h do mesmo dia e calava
+  sobre quem virou a noite de verdade.
+- Não houve ordem obrigatória entre os dois: o código não depende da migration.
+- **Nenhum dado mudou.** `timestamptz` guarda instante, e o instante sempre
+  esteve certo. O que mudou é a resposta para "em que dia isso aconteceu?".
 - `supabase/tests/fuso_horario.test.sql` prova os dois andares. Contra as views
   antigas ele falha em 3 das 8 asserções — é o que faz dele teste. **Não vai no
   SQL editor** (ver abaixo).
