@@ -32,6 +32,11 @@
 -- bug 1, e também do que o runbook de ir ao ar deixa para trás quando apaga
 -- `manutencoes` (docs/handoff.md, passo 2). Roda antes do gatilho existir: o
 -- gatilho cuida do futuro, este update cuida do passado.
+--
+-- Cuidado: este update NÃO cobre `delete from manutencoes`, porque o gatilho
+-- abaixo é `after update`. Apagar as ordens (runbook de ir ao ar, passo 2)
+-- continua deixando veículo preso em MANUTENCAO, e por isso o passo 2 ainda
+-- precisa do `update veiculos ... where status in ('BLOQUEADO','MANUTENCAO')`.
 -- ---------------------------------------------------------------------------
 
 update public.veiculos v
@@ -102,6 +107,22 @@ create trigger trg_libera_veiculo
 --
 -- Fica `after`: o gatilho não decide se o lançamento vale (isso é constraint e
 -- validação de tela), só reflete o que já foi gravado.
+--
+-- O PREÇO DO `greatest`, e como desfazer. Km digitado com um zero a mais
+-- (660402 em vez de 66402) sobe e não desce: corrigir o `km_chegada` do roteiro
+-- não adianta, porque o gatilho refaz o `greatest` e mantém o valor alto. E km
+-- alto demais TRAVA a operação — /roteiro/saida recusa saída com km menor que o
+-- `km_atual` do veículo, então o técnico não consegue mais registrar nada.
+--
+-- A saída é /veiculos: aquela tela escreve `veiculos.km_atual` direto, e não há
+-- gatilho em `veiculos` — só em `roteiros` e `checklists`. Então o gestor
+-- sempre consegue baixar o número à mão. Corrija o roteiro e o veículo (em
+-- qualquer ordem: as duas convergem no valor certo).
+--
+-- Foi escolha, não descuido. O que a fila offline do PWA produz é lançamento
+-- atrasado chegando fora de ordem, todo dia; o que produz km absurdo é erro de
+-- digitação, raro e visível. Deixar o odômetro andar para trás toda vez para
+-- poupar o caso raro sairia mais caro — e o caso raro tem conserto pelo painel.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.atualiza_km_roteiro()
