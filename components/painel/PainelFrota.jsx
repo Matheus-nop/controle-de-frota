@@ -7,6 +7,10 @@ const brl = (n) => (n == null ? "—" : n.toLocaleString("pt-BR", { style: "curr
 const km = (n) => (n == null ? "—" : nf.format(Math.round(n)) + " km");
 const dataBR = (s) => (s ? s.slice(8, 10) + "/" + s.slice(5, 7) : "—");
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+// status de manutenção que já morreu — o resto é ordem em aberto
+const FECHADAS = ["CONCLUÍDA", "CANCELADA"];
+const diasEntre = (de, ate) =>
+  de && ate ? Math.round((Date.parse(ate + "T12:00:00") - Date.parse(de + "T12:00:00")) / 86400000) : null;
 
 function VehIcon() {
   return (
@@ -62,6 +66,7 @@ export default function PainelFrota({ dados, referencia }) {
 
     const ativos = veiculos.filter((v) => v.status === "ATIVO");
     const bloqueados = veiculos.filter((v) => v.status === "BLOQUEADO");
+    const emManutencao = veiculos.filter((v) => v.status === "MANUTENCAO");
 
     const frota = ativos.map((v) => {
       const falta = v.revisao != null && v.km != null ? v.revisao - v.km : null;
@@ -86,11 +91,22 @@ export default function PainelFrota({ dados, referencia }) {
       return { v, motivo: c?.motivo, urg: c?.urg, data: c?.data, cond: c?.cond };
     });
 
+    // info de oficina: a ordem de serviço ainda aberta do veículo, por placa.
+    // "Aberta" é tudo que não foi concluído nem cancelado — ABERTA e EM EXECUÇÃO
+    // hoje, e qualquer status novo que apareça amanhã.
+    const manutInfo = emManutencao.map((v) => {
+      const os = manutencoes
+        .filter((x) => x.placa === v.placa && !FECHADAS.includes(x.status))
+        .sort((a, b) => (b.data || "").localeCompare(a.data || ""))[0];
+      return { v, prob: os?.prob || os?.servico, oficina: os?.oficina, desde: os?.data, prio: os?.prio };
+    });
+
     const gastoManut = manutencoes.reduce((s, x) => s + (x.valor || 0), 0);
 
     return {
       veiculos, roteiros, manutencoes, checklists, porPlaca,
       naRua, concluidosHoje, concluidos, pend, bloqueados, bloqInfo,
+      emManutencao, manutInfo,
       kmMes, custoMes, ativos, frota, revisoesVencidas, gastoManut,
       custos: [...custos].sort((a, b) => (b.total || 0) - (a.total || 0)),
     };
@@ -231,6 +247,22 @@ function Operacao({ m, onSel, referencia }) {
           ))}
         </Coluna>
 
+        <Coluna cor="var(--warn)" titulo="Em manutenção" n={m.emManutencao.length} vazio="Nenhum veículo na oficina.">
+          {m.manutInfo.map(({ v, prob, oficina, desde, prio }, i) => {
+            const dias = diasEntre(desde, referencia);
+            return (
+              <Card key={i} onClick={() => onSel(v.placa)}>
+                <div className="card-top"><Thumb foto={v.foto} /><Plate p={v.placa} /><span className="card-model">{v.modelo}</span>{prio && <span className="tag warn ml-auto">{String(prio).toLowerCase()}</span>}</div>
+                <div className="card-tec">{prob || "Em manutenção"}</div>
+                <div className="card-meta">
+                  <span>{oficina || "oficina não informada"}</span>
+                  <span>{desde ? "desde " + dataBR(desde) + (dias > 0 ? " · " + dias + " dias" : "") : "sem ordem aberta"}</span>
+                </div>
+              </Card>
+            );
+          })}
+        </Coluna>
+
         <Coluna cor="var(--crit)" titulo="Bloqueados" n={m.bloqueados.length} vazio="Nenhum veículo bloqueado.">
           {m.bloqInfo.map(({ v, motivo, urg, cond, data }, i) => (
             <Card key={i} onClick={() => onSel(v.placa)}>
@@ -259,8 +291,14 @@ function Coluna({ cor, titulo, n, vazio, children }) {
 
 /* ============================ FROTA ============================ */
 function Frota({ m, onSel }) {
-  const todos = [...m.frota, ...m.bloqueados.map((v) => ({ ...v, situacao: "bloq" }))];
-  const rot = { vencida: ["Revisão vencida", "warn"], proxima: ["Revisão próxima", "warn"], ok: ["OK", "ok"], sem: ["Sem revisão", "mute"], bloq: ["Bloqueado", "crit"] };
+  // A frota inteira, não só a que está rodando: veículo na oficina continua
+  // sendo veículo da empresa e precisa aparecer em algum lugar.
+  const todos = [
+    ...m.frota,
+    ...m.emManutencao.map((v) => ({ ...v, situacao: "manut" })),
+    ...m.bloqueados.map((v) => ({ ...v, situacao: "bloq" })),
+  ];
+  const rot = { vencida: ["Revisão vencida", "warn"], proxima: ["Revisão próxima", "warn"], ok: ["OK", "ok"], sem: ["Sem revisão", "mute"], manut: ["Em manutenção", "warn"], bloq: ["Bloqueado", "crit"] };
   return (
     <section className="grid-veic">
       {todos.map((v, i) => {
@@ -466,7 +504,8 @@ const CSS = `
 .board-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .board-head h2{font-size:15px;font-weight:650;margin:0}
 .board-head .hint{font-size:12px;color:var(--ink-3)}
-.board{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;align-items:start}
+@media(max-width:1180px){.board{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:980px){.board{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.board{grid-template-columns:1fr}}
 .col{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
