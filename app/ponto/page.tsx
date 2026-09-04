@@ -1,19 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { diaISO } from "@/lib/frota/tempo";
 
-// Conferência de ponto: uma linha por roteiro, com a hora que o veículo saiu e
-// a hora que voltou, para bater com a marcação da folha.
+// Conferência de ponto: os horários que a equipe registrou, para bater com a
+// marcação da folha.
+//
+// Visual: os mesmos tokens e componentes do painel (components/painel/
+// PainelFrota.jsx) — topo navy, KPI em cartão, chip de placa, tag de estado.
+// A tela nasceu como tabela e destoava do resto do app; agora é cartão, e a
+// leitura por dia é a que o time da folha faz de verdade (fecha um dia,
+// confere, passa para o próximo).
 //
 // A tela é de leitura e não tem km nem custo — quem confere ponto não precisa
 // do custo da frota, e o que não aparece não vaza. Quem entra aqui é o papel
 // PONTO (e o gestor); a RLS de `roteiros` é quem garante isso de verdade.
 //
 // Tudo que é hora vem pronto da view v_conferencia_ponto, já no fuso de São
-// Paulo. Nenhuma conta de horário acontece nesta tela — a lição do bug de
-// fuso de agosto foi essa: hora se calcula num lugar só.
+// Paulo. Nenhuma conta de horário acontece nesta tela — a lição do bug de fuso
+// de agosto foi essa: hora se calcula num lugar só.
 
 type Linha = {
   id: string;
@@ -44,20 +50,12 @@ function dataBR(s: string | null) {
   return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : "—";
 }
 
-const input: React.CSSProperties = {
-  width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #CBD5E1",
-  fontSize: 14, boxSizing: "border-box", background: "#fff",
-};
-const lbl: React.CSSProperties = {
-  fontSize: 12, fontWeight: 600, color: "#53607A", marginBottom: 4, display: "block",
-};
-const td: React.CSSProperties = {
-  padding: "10px 10px", borderTop: "1px solid #E3E9F0", fontSize: 13.5, whiteSpace: "nowrap",
-};
-const th: React.CSSProperties = {
-  padding: "9px 10px", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em",
-  color: "#8591A5", fontWeight: 700, textAlign: "left", whiteSpace: "nowrap",
-};
+// "quinta-feira" a partir de "2026-09-04". Meio-dia de propósito: data pura
+// vira UTC no parser e o dia recuaria três horas.
+const fmtDiaSemana = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
+function diaSemana(dia: string) {
+  return fmtDiaSemana.format(new Date(dia + "T12:00:00"));
+}
 
 export default function PontoPage() {
   const [linhas, setLinhas] = useState<Linha[]>([]);
@@ -65,8 +63,7 @@ export default function PontoPage() {
   const [erro, setErro] = useState<string | null>(null);
   // O caminho de volta só existe para quem tem para onde voltar: o gestor.
   // Para o papel PONTO esta é a tela inicial — um "← Painel" ali mandaria a
-  // pessoa para "/", que o proxy devolve na hora para cá. Botão que parece
-  // quebrado é pior do que botão que não existe.
+  // pessoa para "/", que o proxy devolve na hora para cá.
   const [ehGestor, setEhGestor] = useState(false);
 
   const hoje = diaISO(new Date());
@@ -114,8 +111,31 @@ export default function PontoPage() {
     })();
   }, []);
 
-  const tecnicos = Array.from(new Set(linhas.map((l) => l.tecnico_saida))).sort();
-  const visiveis = tecnico ? linhas.filter((l) => l.tecnico_saida === tecnico) : linhas;
+  const tecnicos = useMemo(
+    () => Array.from(new Set(linhas.map((l) => l.tecnico_saida))).sort(),
+    [linhas],
+  );
+  const visiveis = useMemo(
+    () => (tecnico ? linhas.filter((l) => l.tecnico_saida === tecnico) : linhas),
+    [linhas, tecnico],
+  );
+
+  // Um bloco por dia. É assim que a folha é conferida: fecha um dia, confere,
+  // passa para o próximo.
+  const dias = useMemo(() => {
+    const porDia = new Map<string, Linha[]>();
+    for (const l of visiveis) {
+      const lista = porDia.get(l.dia) ?? [];
+      lista.push(l);
+      porDia.set(l.dia, lista);
+    }
+    return [...porDia.entries()].map(([dia, lista]) => ({
+      dia,
+      lista,
+      minutos: lista.reduce((s, l) => s + (l.duracao_min ?? 0), 0),
+      abertos: lista.filter((l) => l.em_aberto).length,
+    }));
+  }, [visiveis]);
 
   const emAberto = visiveis.filter((l) => l.em_aberto).length;
   const viraram = visiveis.filter((l) => l.virou_o_dia).length;
@@ -143,142 +163,229 @@ export default function PontoPage() {
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: "#EBEEF4" }}>
-      <header style={{ background: "linear-gradient(180deg,#17263F,#223B63)", padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logowhite.png" alt="Grupo Nova Opção" style={{ height: 30, display: "block" }} />
-        <span style={{ color: "#AEB8C6", fontSize: 13, fontWeight: 600 }}>Conferência de ponto</span>
-        {ehGestor && (
-          <a href="/" style={{ marginLeft: "auto", color: "#C6D0DE", fontSize: 13, textDecoration: "none", fontWeight: 600 }}>
-            ← Painel
-          </a>
-        )}
-        <form action="/auth/signout" method="post" style={{ marginLeft: ehGestor ? 0 : "auto" }}>
-          <button type="submit" style={{ background: "transparent", border: "1px solid #3A527E", color: "#C6D0DE", borderRadius: 8, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-            Sair
-          </button>
-        </form>
+    <div className="app">
+      <style>{CSS}</style>
+
+      <header className="topbar">
+        <div className="topbar-in">
+          <div className="brand">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="logo-h" src="/logowhite.png" alt="Grupo Nova Opção" />
+          </div>
+          <div className="spacer" />
+          <div className="top-meta">
+            <div className="d">Conferência de ponto</div>
+            <div className="s">{visiveis.length} roteiro(s) no período</div>
+          </div>
+          {ehGestor && <a className="sair volta" href="/">← Painel</a>}
+          <form action="/auth/signout" method="post">
+            <button className="sair" type="submit">Sair</button>
+          </form>
+        </div>
       </header>
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
-        <h1 style={{ fontSize: 21, margin: "4px 0 2px" }}>Horários dos roteiros</h1>
-        <p style={{ color: "#53607A", fontSize: 14, marginBottom: 18 }}>
-          O que a equipe registrou ao sair e ao voltar. Compare com a marcação da folha.
-        </p>
+      <main className="wrap">
+        <section className="kpis">
+          <Kpi lbl="Roteiros" val={String(visiveis.length)} sub="no período escolhido" />
+          <Kpi lbl="Tempo somado" val={duracao(totalMin)} sub="só os roteiros fechados" />
+          <Kpi
+            lbl="Sem chegada"
+            val={String(emAberto)}
+            sub={emAberto > 0 ? "confirmar com o técnico" : "tudo fechado"}
+            tom={emAberto > 0 ? "warn" : null}
+          />
+          <Kpi lbl="Viraram o dia" val={String(viraram)} sub="ponto em dois dias" />
+        </section>
 
-        <section style={{ background: "#fff", border: "1px solid #E3E9F0", borderRadius: 12, padding: 14, marginBottom: 16, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
-          <div>
-            <label style={lbl} htmlFor="de">De</label>
-            <input id="de" style={input} type="date" value={de} onChange={(e) => setDe(e.target.value)} />
+        <section className="filtros">
+          <div className="campo">
+            <label htmlFor="de">De</label>
+            <input id="de" type="date" value={de} onChange={(e) => setDe(e.target.value)} />
           </div>
-          <div>
-            <label style={lbl} htmlFor="ate">Até</label>
-            <input id="ate" style={input} type="date" value={ate} onChange={(e) => setAte(e.target.value)} />
+          <div className="campo">
+            <label htmlFor="ate">Até</label>
+            <input id="ate" type="date" value={ate} onChange={(e) => setAte(e.target.value)} />
           </div>
-          <div>
-            <label style={lbl} htmlFor="tec">Técnico</label>
-            <select id="tec" style={input} value={tecnico} onChange={(e) => setTecnico(e.target.value)}>
+          <div className="campo">
+            <label htmlFor="tec">Técnico</label>
+            <select id="tec" value={tecnico} onChange={(e) => setTecnico(e.target.value)}>
               <option value="">Todos</option>
               {tecnicos.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end" }}>
-            <button
-              onClick={baixarCSV}
-              disabled={visiveis.length === 0}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #C4CCDA", background: "#fff", fontSize: 13.5, fontWeight: 600, cursor: visiveis.length ? "pointer" : "default", opacity: visiveis.length ? 1 : 0.55 }}
-            >
-              ↧ Baixar CSV
-            </button>
-          </div>
+          <button className="btn" onClick={baixarCSV} disabled={visiveis.length === 0}>
+            ↧ Baixar CSV
+          </button>
         </section>
 
-        <section style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", marginBottom: 16 }}>
-          {[
-            ["Roteiros", String(visiveis.length), "no período"],
-            ["Tempo somado", duracao(totalMin), "só os fechados"],
-            ["Sem chegada", String(emAberto), emAberto > 0 ? "confirmar com o técnico" : "tudo fechado"],
-            ["Viraram o dia", String(viraram), "ponto em dois dias"],
-          ].map(([t, v, sub]) => (
-            <div key={t} style={{ background: "#fff", border: "1px solid #E3E9F0", borderRadius: 12, padding: "13px 15px" }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "#8591A5", fontWeight: 600 }}>{t}</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>{v}</div>
-              <div style={{ fontSize: 11.5, color: "#53607A", marginTop: 4 }}>{sub}</div>
-            </div>
-          ))}
-        </section>
+        {erro && <div className="aviso-erro">{erro}</div>}
 
-        {erro && (
-          <div style={{ background: "#FAE5E7", color: "#8E2129", borderRadius: 10, padding: 14, fontSize: 13.5, marginBottom: 14 }}>
-            {erro}
-          </div>
+        {carregando && <div className="panel"><div className="empty">Carregando…</div></div>}
+
+        {!carregando && dias.length === 0 && !erro && (
+          <div className="panel"><div className="empty">Nenhum roteiro no período escolhido.</div></div>
         )}
 
-        <div style={{ background: "#fff", border: "1px solid #E3E9F0", borderRadius: 12, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-            <thead>
-              <tr>
-                <th style={th}>Dia</th>
-                <th style={th}>Técnico</th>
-                <th style={th}>Veículo</th>
-                <th style={th}>Saída</th>
-                <th style={th}>Chegada</th>
-                <th style={th}>Tempo fora</th>
-                <th style={th}>Observação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visiveis.map((l) => (
-                <tr key={l.id} style={l.em_aberto ? { background: "#FDF6E7" } : undefined}>
-                  <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{dataBR(l.dia)}</td>
-                  <td style={td}>
-                    {l.tecnico_saida}
-                    {l.tecnico_chegada && l.tecnico_chegada !== l.tecnico_saida && (
-                      <span style={{ color: "#8591A5" }}> → {l.tecnico_chegada}</span>
-                    )}
-                  </td>
-                  <td style={{ ...td, color: "#53607A" }}>{l.modelo} · {l.placa}</td>
-                  <td style={{ ...td, fontVariantNumeric: "tabular-nums", fontWeight: 650 }}>{hhmm(l.hora_saida)}</td>
-                  <td style={{ ...td, fontVariantNumeric: "tabular-nums", fontWeight: 650 }}>
-                    {hhmm(l.hora_chegada)}
-                    {l.virou_o_dia && (
-                      <span style={{ color: "#C08306", fontSize: 11, fontWeight: 700 }}> +1</span>
-                    )}
-                  </td>
-                  <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{duracao(l.duracao_min)}</td>
-                  <td style={{ ...td, color: "#8591A5", fontSize: 12.5, whiteSpace: "normal" }}>
-                    {l.em_aberto
-                      ? "chegada não registrada"
-                      : l.virou_o_dia
-                        ? "voltou em " + dataBR(l.dia_chegada)
-                        : ""}
-                  </td>
-                </tr>
-              ))}
-              {!carregando && visiveis.length === 0 && (
-                <tr>
-                  <td style={{ ...td, color: "#8591A5", textAlign: "center" }} colSpan={7}>
-                    Nenhum roteiro no período escolhido.
-                  </td>
-                </tr>
-              )}
-              {carregando && (
-                <tr>
-                  <td style={{ ...td, color: "#8591A5", textAlign: "center" }} colSpan={7}>
-                    Carregando…
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {dias.map(({ dia, lista, minutos, abertos }) => (
+          <section key={dia} className="dia">
+            <div className="dia-head">
+              <span className="dia-data mono">{dataBR(dia)}</span>
+              <span className="dia-semana">{diaSemana(dia)}</span>
+              <span className="dia-meta mono ml-auto">
+                {lista.length} roteiro(s) · {duracao(minutos)}
+                {abertos > 0 ? ` · ${abertos} sem chegada` : ""}
+              </span>
+            </div>
 
-        <p style={{ color: "#8591A5", fontSize: 12.5, marginTop: 14, lineHeight: 1.5 }}>
-          A linha amarela é roteiro sem chegada registrada: o horário de volta ainda não
-          existe, não é zero. <b>+1</b> ao lado da chegada quer dizer que o roteiro virou o
-          dia — o ponto dessa pessoa cai em dois dias.
-        </p>
-      </div>
-    </main>
+            <div className="cards">
+              {lista.map((l) => (
+                <article key={l.id} className={l.em_aberto ? "card aberto" : "card"}>
+                  <div className="card-top">
+                    <span className="plate">{l.placa}</span>
+                    <span className="card-model">{l.modelo}</span>
+                    {l.em_aberto && <span className="tag warn ml-auto">sem chegada</span>}
+                    {l.virou_o_dia && <span className="tag ok ml-auto">virou o dia</span>}
+                  </div>
+
+                  <div className="card-tec">{l.tecnico_saida}</div>
+                  {l.tecnico_chegada && l.tecnico_chegada !== l.tecnico_saida && (
+                    <div className="card-troca">voltou com {l.tecnico_chegada}</div>
+                  )}
+
+                  <div className="horas">
+                    <div className="hora">
+                      <span className="rot">Saída</span>
+                      <b className="mono">{hhmm(l.hora_saida)}</b>
+                    </div>
+                    <span className="flecha">→</span>
+                    <div className="hora">
+                      <span className="rot">Chegada</span>
+                      <b className="mono">{hhmm(l.hora_chegada)}</b>
+                    </div>
+                    <div className="hora fim">
+                      <span className="rot">Tempo fora</span>
+                      <b className="mono">{duracao(l.duracao_min)}</b>
+                    </div>
+                  </div>
+
+                  {(l.em_aberto || l.virou_o_dia) && (
+                    <div className="card-nota">
+                      {l.em_aberto
+                        ? "O técnico não registrou a chegada. O horário de volta não existe — não é zero."
+                        : `Voltou em ${dataBR(l.dia_chegada)}: o ponto dessa pessoa cai em dois dias.`}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+
+        {dias.length > 0 && (
+          <div className="legend">
+            Os horários são os que a equipe registrou ao sair e ao voltar, no fuso de São Paulo.
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
+
+function Kpi({ lbl, val, sub, tom }: { lbl: string; val: string; sub: string; tom?: string | null }) {
+  return (
+    <div className="kpi">
+      <div className="lbl">{lbl}</div>
+      <div className={"val mono" + (tom ? " " + tom : "")}>{val}</div>
+      <div className="sub">{sub}</div>
+    </div>
+  );
+}
+
+/* ============================ CSS ============================ */
+// Mesmo bloco de tokens do painel. Duplicado de propósito: as telas do projeto
+// carregam o próprio estilo e não dependem de um CSS global — mexer numa não
+// quebra a outra. Se um dia forem três telas assim, aí vale extrair.
+const CSS = `
+.app{--bg:#EBEEF4;--surface:#fff;--surface-2:#F4F6FB;--border:#DBE0EA;--border-strong:#C4CCDA;
+  --ink:#16233C;--ink-2:#53607A;--ink-3:#8591A5;--brand:#2B4C8C;--navy:#17263F;--navy-2:#223B63;
+  --silver:#AEB8C6;--ok:#1B9E6B;--ok-bg:#E5F4EE;--warn:#C08306;--warn-bg:#FAEFD6;--crit:#CE3A44;--crit-bg:#FAE5E7;
+  --shadow:0 1px 2px rgba(22,35,60,.06),0 8px 24px rgba(22,35,60,.05);
+  min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.app .mono{font-variant-numeric:tabular-nums}
+.app button,.app input,.app select{font-family:inherit}
+.ml-auto{margin-left:auto}
+
+.topbar{background:linear-gradient(180deg,var(--navy),var(--navy-2));color:#fff;position:sticky;top:0;z-index:10}
+.topbar-in{max-width:1240px;margin:0 auto;padding:13px 20px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo-h{height:42px;display:block}
+@media(max-width:560px){.logo-h{height:34px}}
+.spacer{flex:1}
+.top-meta{text-align:right;line-height:1.3}
+.top-meta .d{font-size:13px;font-weight:600}
+.top-meta .s{font-size:11.5px;color:var(--silver)}
+.sair{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;white-space:nowrap}
+.sair:hover{background:rgba(255,255,255,.2)}
+@media(max-width:560px){.top-meta{display:none}.sair{padding:8px 10px}}
+
+.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 64px}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+@media(max-width:840px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow)}
+.kpi .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.kpi .val{font-size:25px;font-weight:700;letter-spacing:-.02em;margin-top:7px;line-height:1}
+.kpi .val.warn{color:var(--warn)}
+.kpi .sub{font-size:11.5px;color:var(--ink-2);margin-top:6px}
+
+.filtros{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);
+  padding:14px 16px;margin-bottom:22px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
+.campo{display:flex;flex-direction:column;gap:5px;min-width:150px;flex:1}
+.campo label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.campo input,.campo select{padding:9px 10px;border-radius:9px;border:1px solid var(--border-strong);
+  font-size:14px;background:var(--surface);color:var(--ink);box-sizing:border-box;width:100%}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;font-size:13.5px;
+  font-weight:600;cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.btn:disabled{opacity:.5;cursor:default}
+
+.aviso-erro{background:var(--crit-bg);border:1px solid #E9B7BC;color:#8E2129;border-radius:12px;padding:14px 16px;font-size:13.5px;margin-bottom:16px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 16px;box-shadow:var(--shadow)}
+.empty{font-size:12.5px;color:var(--ink-3);padding:18px 4px;text-align:center}
+.legend{margin-top:24px;font-size:12px;color:var(--ink-3);text-align:center}
+
+.dia{margin-bottom:26px}
+.dia-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap;
+  border-bottom:1px solid var(--border);padding-bottom:8px}
+.dia-data{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.dia-semana{font-size:12.5px;color:var(--ink-2);text-transform:capitalize}
+.dia-meta{font-size:11.5px;color:var(--ink-3)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--ok);
+  border-radius:12px;padding:13px 14px;box-shadow:var(--shadow)}
+.card.aberto{border-left-color:var(--warn);background:linear-gradient(90deg,var(--warn-bg),var(--surface) 60%)}
+.card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.plate{font-weight:700;font-size:12px;letter-spacing:.04em;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--border-strong);border-radius:6px;padding:2px 7px}
+.card-model{font-size:12px;color:var(--ink-2);font-weight:500}
+.tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 7px;border-radius:5px}
+.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.card-tec{font-size:14px;font-weight:650;letter-spacing:-.01em}
+.card-troca{font-size:11.5px;color:var(--ink-2);margin-top:2px}
+
+.horas{display:flex;align-items:flex-end;gap:12px;margin-top:11px;padding-top:11px;border-top:1px solid var(--border)}
+.hora{display:flex;flex-direction:column;gap:2px}
+.hora .rot{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.hora b{font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.hora.fim{margin-left:auto;text-align:right}
+.hora.fim b{font-size:15px;color:var(--ink-2)}
+.flecha{color:var(--ink-3);font-size:13px;padding-bottom:2px}
+
+.card-nota{font-size:11.5px;color:var(--ink-2);line-height:1.45;margin-top:10px;
+  background:var(--surface-2);border-radius:7px;padding:7px 9px}
+
+@media print{.topbar,.filtros,.legend{display:none!important}.app{background:#fff}}
+@media(prefers-reduced-motion:reduce){.app *{transition:none!important}}
+`;
