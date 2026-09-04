@@ -17,6 +17,7 @@ type Papel = "GESTOR" | "PCM" | "PONTO" | "TECNICO";
 const ACESSO: Array<{ rota: string; papeis: Papel[] }> = [
   { rota: "/veiculos", papeis: ["GESTOR"] },
   { rota: "/usuarios", papeis: ["GESTOR"] },
+  { rota: "/relatorios", papeis: ["GESTOR"] },
   { rota: "/ocorrencias", papeis: ["GESTOR"] },
   { rota: "/historico", papeis: ["GESTOR", "PCM"] },
   { rota: "/alertas", papeis: ["GESTOR", "PCM"] },

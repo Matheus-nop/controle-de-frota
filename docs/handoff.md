@@ -38,6 +38,7 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/ponto` | Conferência de horário de saída e chegada, com CSV | GESTOR, PONTO |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
 | `/usuarios` | Cadastro de acesso: vincular login a pessoa, papel, desligar | GESTOR |
+| `/relatorios` | Cinco relatórios com período e CSV: combustível, km, técnicos, manutenções, ocorrências | GESTOR |
 | `/login` | Login por usuário + senha | público |
 | `/api/health` | Health-check do Supabase | público |
 
@@ -296,6 +297,30 @@ para a oficina preencher à mão (serviços, peças, km de entrega, valor,
 assinaturas). O link aparece no cartão da manutenção, na ficha do painel e num
 aviso verde logo depois de abrir a ordem — que é quando o veículo ainda está
 com quem vai levar. O papel não grava nada: o resultado volta para `/manutencao`.
+
+### Relatórios (feito)
+`/relatorios` — um período, cinco recortes, CSV em cada e impressão em A4:
+combustível por veículo, km por dia/mês/veículo, deslocamentos por técnico,
+manutenções e ocorrências.
+
+Tela própria e não aba do painel porque as perguntas são opostas: o painel
+responde "como está agora" e carrega a frota sem recorte de data; relatório
+responde "o que aconteceu entre tal e tal dia", e sem período todo número vira
+o acumulado de sempre, que não fecha mês.
+
+As contas ficam em `app/relatorios/dados.ts`, fora do JSX — é a parte que
+precisa estar certa. Duas convenções que valem para todas elas:
+- o **custo do roteiro** vem pronto de `v_roteiros` (`custo_roteiro`), nunca
+  recalculado no front: duas fontes para o mesmo número é o erro da planilha;
+- o **dia do roteiro** sai de `diaDe(saida_em)` (fuso de São Paulo), o que
+  impede o roteiro das 22h de cair no mês seguinte no relatório mensal.
+
+Litros é **estimativa** pelo consumo cadastrado, não nota de posto — e fica
+nulo, não zero, para veículo sem consumo cadastrado. Custo real dependeria de
+registro de abastecimento, que continua na lista de ideias.
+
+`/relatorios` é só do GESTOR: a RLS de `ocorrencias` não abre para PCM, que
+veria a aba vazia e leria isso como "não houve ocorrência".
 
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
