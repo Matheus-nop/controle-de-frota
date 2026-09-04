@@ -274,6 +274,14 @@ Conferido, grava `km_verificado_em` / `km_verificado_por` e sai da fila. A
 situação continua sendo calculada na view — o que se grava é a decisão de quem
 conferiu, não um número derivado. Prova: `supabase/tests/km_alto.test.sql`.
 
+**Armadilha que apareceu em produção:** a coluna de conferência nasce nula, e
+o histórico inteiro nasce junto com ela. No primeiro dia depois da 0010 a fila
+de pendências encheu de roteiro antigo — inclusive um que o gestor já tinha
+fechado à mão semanas antes. `0013_km_alto_historico.sql` marca como conferido
+tudo que fechou antes de a regra existir. A regra vale daqui para a frente;
+fila que acusa o passado é fila que se aprende a ignorar, e aí a viagem de
+1.800 km que interessa passa batido no meio do lixo.
+
 ### Horários dos roteiros (feito)
 Os horários sempre foram gravados; não apareciam em lugar nenhum depois do
 fechamento. Agora `v_roteiros` entrega `hora_saida`, `hora_chegada` e

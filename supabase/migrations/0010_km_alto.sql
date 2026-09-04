@@ -19,6 +19,10 @@
 -- Nada de número derivado gravado: a marcação é a coluna `situacao` da view,
 -- calculada na hora. O que se grava é o FATO de alguém ter conferido —
 -- `km_verificado_em` / `km_verificado_por` — que não é cálculo, é decisão.
+--
+-- ATENÇÃO: rode 0013_km_alto_historico.sql logo depois desta. Sem ela, todo
+-- roteiro antigo com mais de 600 km cai na fila de pendências no primeiro
+-- dia — o campo de conferência acabou de nascer nulo para o histórico inteiro.
 
 -- ---------------------------------------------------------------------------
 -- 1. O teto vira o limite da digitação, não o da viagem.
