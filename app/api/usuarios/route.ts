@@ -60,6 +60,15 @@ async function exigirGestor(): Promise<Guarda> {
   return { resposta: null, supabase };
 }
 
+// A tela pergunta o que ela pode oferecer. Sem a chave admin no ambiente,
+// criar login e trocar senha ficam com o painel do Supabase — o resto do
+// cadastro (vincular pessoa, papel, desligar) funciona do mesmo jeito.
+export async function GET() {
+  const guarda = await exigirGestor();
+  if (guarda.resposta) return guarda.resposta;
+  return NextResponse.json({ adminDisponivel: criarClienteAdmin() !== null });
+}
+
 export async function POST(request: Request) {
   const guarda = await exigirGestor();
   if (guarda.resposta) return guarda.resposta;
@@ -171,13 +180,35 @@ export async function PATCH(request: Request) {
   const mudaAtivo = corpo.ativo !== undefined;
 
   if (trocaSenha || mudaAtivo) {
+    // Sem login não há senha nem bloqueio a mexer — mas `ativo` já foi salvo.
     if (!pessoa.user_id) {
       return trocaSenha
         ? erro("Essa pessoa ainda não tem login. Crie o acesso primeiro.")
         : NextResponse.json({ ok: true });
     }
+
     const admin = criarClienteAdmin();
-    if (!admin) return erro("Falta a variável SUPABASE_SERVICE_ROLE_KEY no ambiente.", 503);
+
+    // Sem a chave admin, o papel e o `ativo` já foram gravados acima e valem.
+    // O que NÃO dá para fazer daqui é mexer no login — e é preciso dizer isso
+    // em voz alta: desligar sem bloquear o login deixa a pessoa entrando com a
+    // senha antiga, e o gestor precisa saber que falta um passo no Supabase.
+    if (!admin) {
+      if (trocaSenha) {
+        return erro(
+          "Trocar senha só pelo painel do Supabase: Authentication → o usuário → " +
+            "Reset password. (Para fazer por aqui, configure SUPABASE_SERVICE_ROLE_KEY.)",
+          503,
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        aviso: corpo.ativo
+          ? "Papel e situação salvos. Se o login estava banido no Supabase, libere por lá."
+          : "Tirado das listas do app. O login ainda funciona: bloqueie em " +
+            "Authentication → o usuário → Ban user.",
+      });
+    }
 
     if (trocaSenha && String(corpo.senha).length < 8) {
       return erro("A senha precisa de pelo menos 8 caracteres.");

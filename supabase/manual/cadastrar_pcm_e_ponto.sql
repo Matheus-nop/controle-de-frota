@@ -1,13 +1,17 @@
 -- MODELO — cadastro de acesso por SQL. PLANO B.
 --
--- O caminho normal agora é a tela /usuarios (só o gestor entra): cria o login,
--- troca senha, muda papel e desliga quem saiu, sem SQL. Ela usa a API do
--- GoTrue, que é mais segura que este insert — não depende de acertar as
--- colunas de token de auth.users, que foi o que fez o login responder `{}`.
+-- O caminho normal agora tem duas etapas, e nenhuma delas é este arquivo:
+--   1. o LOGIN nasce no painel do Supabase — Authentication → Add user, com
+--      "Auto Confirm User" marcado;
+--   2. a PESSOA (nome e papel) nasce na tela /usuarios, que lista os logins
+--      que ainda não têm cadastro.
 --
--- Use este arquivo só quando a tela não servir: o PRIMEIRO gestor (não há
--- ninguém logado para criar o segundo), ou se a SUPABASE_SERVICE_ROLE_KEY
--- ainda não estiver configurada no Vercel.
+-- É melhor assim porque o painel do Supabase cria o usuário pela API do
+-- GoTrue: não depende de acertar as colunas de token de auth.users, que é o
+-- que fez o login responder `{}` em agosto.
+--
+-- Use este arquivo só quando não houver alternativa: o PRIMEIRO gestor, porque
+-- não existe ninguém logado para completar o passo 2.
 --
 -- NÃO É MIGRAÇÃO. Não colar como está: tem senha dentro. Copie o bloco,
 -- troque nome/usuário/senha, cole no SQL editor do Supabase e não commite

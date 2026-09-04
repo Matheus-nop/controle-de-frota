@@ -37,7 +37,7 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/manutencao/ordem?id=` | Ordem de serviço em A4 para imprimir e mandar com o veículo | GESTOR, PCM |
 | `/ponto` | Conferência de horário de saída e chegada, com CSV | GESTOR, PONTO |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
-| `/usuarios` | Cadastro de acesso: criar login, trocar senha, mudar papel, desligar | GESTOR |
+| `/usuarios` | Cadastro de acesso: vincular login a pessoa, papel, desligar | GESTOR |
 | `/login` | Login por usuário + senha | público |
 | `/api/health` | Health-check do Supabase | público |
 
@@ -60,25 +60,50 @@ proxy (`lib/supabase/middleware.ts`) devolve quem bater na porta errada. A RLS
 - **Gestor** entra com e-mail real completo; os demais entram só com o usuário
   (ex.: `igor`) e o app completa com `@frota.local`.
 - 13 técnicos cadastrados e vinculados a logins internos.
-- **Cadastro de acesso é pela tela `/usuarios`**, não mais por SQL. Ela cria o
-  login pela API do GoTrue (`auth.admin.createUser`), o que evita o insert
-  manual em `auth.users` que fez o login responder `{}` em agosto.
-- `supabase/manual/cadastrar_pcm_e_ponto.sql` continua no repositório como
-  plano B: o **primeiro** gestor (não há ninguém logado para criá-lo) e o caso
-  de a chave de serviço ainda não estar no Vercel.
+#### Como se cadastra alguém (decisão de 2026-09)
+Em duas etapas, e as duas são obrigatórias:
 
-#### A chave que `/usuarios` precisa
-`SUPABASE_SERVICE_ROLE_KEY` no ambiente do app (Vercel → Settings →
-Environment Variables; valor em Supabase → Project Settings → API →
-`service_role`). Ela ignora a RLS, então:
-- **sem** o prefixo `NEXT_PUBLIC_` — com ele o Next embutiria a chave no bundle
-  que vai para o navegador;
-- importada só em `lib/supabase/admin.ts`, que só é usado por `app/api/`.
+1. **O login, no painel do Supabase.** Authentication → Add user → Create new
+   user. E-mail interno `primeiro.ultimo@frota.local` para quem não tem e-mail
+   de verdade, senha de 8+ caracteres, e **marcar `Auto Confirm User`** — sem
+   isso o GoTrue espera uma confirmação que nunca chega num `@frota.local` e o
+   login não entra.
+2. **A pessoa, na tela `/usuarios`.** O login novo aparece em "Logins
+   aguardando cadastro"; o gestor dá nome e papel. Sem esta etapa a pessoa
+   entra no app e **não é ninguém**: todo nome de roteiro, checklist e
+   manutenção é FK para `tecnicos`, e quem não tem essa linha cai em `/campo`
+   sem conseguir lançar nada.
+
+Quem já está no cadastro sem login (técnico antigo, gente vinda da planilha)
+aparece numa lista à parte no passo 2 — escolher ali evita a mesma pessoa
+virar dois registros e partir o histórico em dois.
+
+A lista de logins pendentes vem de `logins_sem_pessoa()`
+(`supabase/migrations/0012_logins_sem_pessoa.sql`), `security definer` porque
+`auth.users` não é exposta ao PostgREST — e com checagem de gestor na primeira
+linha do corpo, provada em `supabase/tests/logins_sem_pessoa.test.sql`.
+
+`supabase/manual/cadastrar_pcm_e_ponto.sql` continua no repositório como plano
+B para o **primeiro** gestor, quando ainda não há ninguém logado para cadastrar.
+
+#### O caminho opcional: criar login pelo próprio app
+Existe pronto, desligado por falta de uma variável. Se um dia
+`SUPABASE_SERVICE_ROLE_KEY` for configurada no ambiente do app (Vercel →
+Settings → Environment Variables; valor em Supabase → Project Settings → API →
+`service_role`), a tela `/usuarios` passa a criar login e trocar senha
+sozinha — ela pergunta ao servidor o que pode oferecer e se ajusta.
+
+Se for configurar um dia, dois cuidados:
+- **sem** o prefixo `NEXT_PUBLIC_` — com ele o Next embute a chave no bundle
+  que vai para o navegador, e ela ignora a RLS;
+- importada só em `lib/supabase/admin.ts`, usado apenas por `app/api/`.
 
 A chave executa a ação; quem autoriza é o cookie de sessão — `/api/usuarios`
-confirma que o chamador é `GESTOR` antes de qualquer coisa. Sem a variável o
-app inteiro continua funcionando: só a tela de cadastro avisa que falta
-configurar.
+confirma que o chamador é `GESTOR` antes de qualquer coisa.
+
+**Enquanto ela não existir**, uma coisa fica pela metade e a tela avisa: desligar
+alguém tira a pessoa das listas do app, mas não bloqueia o login. Para ela parar
+de entrar de verdade: Supabase → Authentication → o usuário → Ban user.
 
 ### Storage (buckets públicos)
 `checklists` (fotos do checklist) · `roteiros` (foto do painel/hodômetro) ·
