@@ -63,6 +63,11 @@ export default function PontoPage() {
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  // O caminho de volta só existe para quem tem para onde voltar: o gestor.
+  // Para o papel PONTO esta é a tela inicial — um "← Painel" ali mandaria a
+  // pessoa para "/", que o proxy devolve na hora para cá. Botão que parece
+  // quebrado é pior do que botão que não existe.
+  const [ehGestor, setEhGestor] = useState(false);
 
   const hoje = diaISO(new Date());
   const quinzeDias = diaISO(new Date(Date.now() - 15 * 24 * 60 * 60 * 1000));
@@ -98,6 +103,17 @@ export default function PontoPage() {
     buscar();
   }, [buscar]);
 
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("tecnicos").select("papel").eq("user_id", user.id).maybeSingle();
+      setEhGestor((data as { papel?: string } | null)?.papel === "GESTOR");
+    })();
+  }, []);
+
   const tecnicos = Array.from(new Set(linhas.map((l) => l.tecnico_saida))).sort();
   const visiveis = tecnico ? linhas.filter((l) => l.tecnico_saida === tecnico) : linhas;
 
@@ -132,7 +148,12 @@ export default function PontoPage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logowhite.png" alt="Grupo Nova Opção" style={{ height: 30, display: "block" }} />
         <span style={{ color: "#AEB8C6", fontSize: 13, fontWeight: 600 }}>Conferência de ponto</span>
-        <form action="/auth/signout" method="post" style={{ marginLeft: "auto" }}>
+        {ehGestor && (
+          <a href="/" style={{ marginLeft: "auto", color: "#C6D0DE", fontSize: 13, textDecoration: "none", fontWeight: 600 }}>
+            ← Painel
+          </a>
+        )}
+        <form action="/auth/signout" method="post" style={{ marginLeft: ehGestor ? 0 : "auto" }}>
           <button type="submit" style={{ background: "transparent", border: "1px solid #3A527E", color: "#C6D0DE", borderRadius: 8, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
             Sair
           </button>
