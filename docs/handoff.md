@@ -37,6 +37,7 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/manutencao/ordem?id=` | Ordem de serviço em A4 para imprimir e mandar com o veículo | GESTOR, PCM |
 | `/ponto` | Conferência de horário de saída e chegada, com CSV | GESTOR, PONTO |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
+| `/usuarios` | Cadastro de acesso: criar login, trocar senha, mudar papel, desligar | GESTOR |
 | `/login` | Login por usuário + senha | público |
 | `/api/health` | Health-check do Supabase | público |
 
@@ -59,8 +60,25 @@ proxy (`lib/supabase/middleware.ts`) devolve quem bater na porta errada. A RLS
 - **Gestor** entra com e-mail real completo; os demais entram só com o usuário
   (ex.: `igor`) e o app completa com `@frota.local`.
 - 13 técnicos cadastrados e vinculados a logins internos.
-- Para criar PCM e ponto: `supabase/manual/cadastrar_pcm_e_ponto.sql` (modelo,
-  tem senha dentro — não commitar preenchido).
+- **Cadastro de acesso é pela tela `/usuarios`**, não mais por SQL. Ela cria o
+  login pela API do GoTrue (`auth.admin.createUser`), o que evita o insert
+  manual em `auth.users` que fez o login responder `{}` em agosto.
+- `supabase/manual/cadastrar_pcm_e_ponto.sql` continua no repositório como
+  plano B: o **primeiro** gestor (não há ninguém logado para criá-lo) e o caso
+  de a chave de serviço ainda não estar no Vercel.
+
+#### A chave que `/usuarios` precisa
+`SUPABASE_SERVICE_ROLE_KEY` no ambiente do app (Vercel → Settings →
+Environment Variables; valor em Supabase → Project Settings → API →
+`service_role`). Ela ignora a RLS, então:
+- **sem** o prefixo `NEXT_PUBLIC_` — com ele o Next embutiria a chave no bundle
+  que vai para o navegador;
+- importada só em `lib/supabase/admin.ts`, que só é usado por `app/api/`.
+
+A chave executa a ação; quem autoriza é o cookie de sessão — `/api/usuarios`
+confirma que o chamador é `GESTOR` antes de qualquer coisa. Sem a variável o
+app inteiro continua funcionando: só a tela de cadastro avisa que falta
+configurar.
 
 ### Storage (buckets públicos)
 `checklists` (fotos do checklist) · `roteiros` (foto do painel/hodômetro) ·

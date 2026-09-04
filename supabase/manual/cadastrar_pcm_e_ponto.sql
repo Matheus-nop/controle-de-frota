@@ -1,4 +1,13 @@
--- MODELO — cadastro de acesso para PCM e time de PONTO.
+-- MODELO — cadastro de acesso por SQL. PLANO B.
+--
+-- O caminho normal agora é a tela /usuarios (só o gestor entra): cria o login,
+-- troca senha, muda papel e desliga quem saiu, sem SQL. Ela usa a API do
+-- GoTrue, que é mais segura que este insert — não depende de acertar as
+-- colunas de token de auth.users, que foi o que fez o login responder `{}`.
+--
+-- Use este arquivo só quando a tela não servir: o PRIMEIRO gestor (não há
+-- ninguém logado para criar o segundo), ou se a SUPABASE_SERVICE_ROLE_KEY
+-- ainda não estiver configurada no Vercel.
 --
 -- NÃO É MIGRAÇÃO. Não colar como está: tem senha dentro. Copie o bloco,
 -- troque nome/usuário/senha, cole no SQL editor do Supabase e não commite

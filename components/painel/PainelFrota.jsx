@@ -169,6 +169,7 @@ export default function PainelFrota({ dados, referencia, papel = "GESTOR" }) {
           <a className="btn" href="/historico">Histórico</a>
           {soGestor && <a className="btn" href="/ponto">Ponto</a>}
           {soGestor && <a className="btn" href="/veiculos">Veículos</a>}
+          {soGestor && <a className="btn" href="/usuarios">Usuários</a>}
           <a className="btn rel" onClick={() => setView("relatorios")}>↧ Relatórios</a>
         </div>
 
