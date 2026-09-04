@@ -18,6 +18,9 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 - **roteiro**: uma saída + a chegada correspondente. É a unidade de trabalho.
 - **placa**: sempre normalizada, sem espaço nem hífen (SRT9D55).
 - **técnico**: quem dirige. **gestor**: quem administra a frota.
+- **PCM**: planejamento e controle de manutenção — abre e fecha ordem de serviço.
+- **ponto**: o time da folha, que confere horário de saída e chegada em `/ponto`.
+- **ordem de serviço**: o papel que vai com o veículo para a oficina.
 - **checklist**: vistoria semanal do veículo.
 - Não use "viagem", "corrida", "motorista", "driver", "trip". A equipe não fala assim.
 
@@ -27,5 +30,6 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 - [x] Fase 3 — painel
 - [x] Fase 4 — PWA de campo
 - [~] Fase 5 — automações (km automático, bloqueio por checklist, alertas ativos)
+- [~] Fase 6 — papéis PCM e ponto, km alto com conferência, ordem de serviço
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.

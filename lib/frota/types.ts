@@ -18,6 +18,7 @@ export interface VeiculoDados {
 }
 
 export interface RoteiroDados {
+  id?: string | number | null; // ausente no seed; usado para marcar km conferido
   placa: string;
   veic: string;
   ds: string | null; // data saida  YYYY-MM-DD
@@ -28,8 +29,11 @@ export interface RoteiroDados {
   kms: number | null;
   kmc: number | null;
   kmr: number | null;
+  dur?: string | null; // "8h32" — tempo fora, para a conferencia de ponto
   st: string; // situacao no vocabulario do painel
   pend: string | number | null;
+  obsc?: string | null; // observacao da chegada: e onde o tecnico justifica km alto
+  verificadoPor?: string | null; // quem conferiu o km alto (null = ninguem ainda)
   [k: string]: unknown;
 }
 
@@ -48,6 +52,12 @@ export interface ManutencaoDados {
   conclusao: string | null;
   valor: number | null;
   servico: string | null;
+  // o que o gestor abre a manutencao para ver: o que trocaram e quanto custou
+  pecas?: string | null;
+  orcamento?: number | null;
+  responsavel?: string | null;
+  proximaRevisao?: number | null;
+  notaFiscal?: string | null;
   [k: string]: unknown;
 }
 

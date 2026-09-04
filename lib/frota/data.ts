@@ -11,7 +11,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { SEED_DADOS } from "./seed";
-import { diaDe, horaDe, hojeBR } from "./tempo";
+import { diaDe, duracaoEntre, horaDe, hojeBR } from "./tempo";
 import type {
   AlertaAtivoDados,
   Dados,
@@ -87,6 +87,7 @@ function mapVeiculo(row: any): VeiculoDados {
 
 function mapRoteiro(row: any): RoteiroDados {
   return {
+    id: row.id ?? null,
     placa: row.placa,
     veic: veicLabel(row.modelo, row.placa),
     ds: datePart(row.saida_em),
@@ -97,8 +98,11 @@ function mapRoteiro(row: any): RoteiroDados {
     kms: row.km_saida ?? null,
     kmc: row.km_chegada ?? null,
     kmr: row.km_rodado ?? null,
+    dur: duracaoEntre(row.saida_em, row.chegada_em),
     st: mapSituacao(row.situacao),
     pend: row.descricao_pendencias ?? null,
+    obsc: row.obs_chegada ?? null,
+    verificadoPor: row.km_verificado_nome ?? null,
   };
 }
 
@@ -129,6 +133,11 @@ function mapManutencao(row: any): ManutencaoDados {
     conclusao: row.concluida_em ?? null,
     valor: row.valor_final ?? null,
     servico: row.servico_realizado ?? null,
+    pecas: row.pecas_trocadas ?? null,
+    orcamento: row.orcamento ?? null,
+    responsavel: one(row.responsavel)?.nome ?? null,
+    proximaRevisao: row.proxima_revisao_km ?? null,
+    notaFiscal: row.nota_fiscal_url ?? null,
   };
 }
 
@@ -169,7 +178,9 @@ export async function carregarDados(): Promise<ResultadoDados> {
       supabase.from("veiculos").select("*, responsavel:responsavel_id(nome)"),
       supabase.from("v_roteiros").select("*"),
       supabase.from("v_custo_veiculo").select("*"),
-      supabase.from("manutencoes").select("*, veiculo:veiculo_id(placa,modelo)"),
+      supabase
+        .from("manutencoes")
+        .select("*, veiculo:veiculo_id(placa,modelo), responsavel:responsavel_id(nome)"),
       supabase
         .from("checklists")
         .select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)"),

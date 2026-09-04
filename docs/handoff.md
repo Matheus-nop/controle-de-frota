@@ -27,13 +27,15 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/` | Painel do gestor: kanban de operação, frota, custos, manutenções, relatórios (CSV/PDF), ficha do veículo | GESTOR |
 | `/campo` | Tela simples do técnico: 3 botões grandes + "na rua agora" | todos |
 | `/roteiro/saida` | Registrar saída (valida km, um roteiro aberto por veículo, foto do painel) | todos |
-| `/roteiro/chegada` | Registrar chegada (valida km ≥ saída e ≤ 600, pendência, foto) | todos |
+| `/roteiro/chegada` | Registrar chegada (km ≥ saída; acima de 600 km pede confirmação, acima de 5.000 barra) | todos |
 | `/checklist` | Checklist semanal (réplica do Google Forms: 7 seções, avaria condicional, bloqueio, fotos) | todos |
 | `/ocorrencia` | Relatar dano/acidente/avaria com foto obrigatória | todos |
 | `/ocorrencias` | Fila de ocorrências: tratar, resolver, virar manutenção | GESTOR |
-| `/historico` | Tudo que a equipe registrou, com as fotos, por veículo e período | GESTOR |
-| `/alertas` | O que precisa de atenção agora, com o botão que resolve cada caso | GESTOR |
-| `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR |
+| `/historico` | Tudo que a equipe registrou, com as fotos, por veículo e período | GESTOR, PCM |
+| `/alertas` | O que precisa de atenção agora, com o botão que resolve cada caso | GESTOR, PCM |
+| `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR, PCM |
+| `/manutencao/ordem?id=` | Ordem de serviço em A4 para imprimir e mandar com o veículo | GESTOR, PCM |
+| `/ponto` | Conferência de horário de saída e chegada, com CSV | GESTOR, PONTO |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
 | `/login` | Login por usuário + senha | público |
 | `/api/health` | Health-check do Supabase | público |
@@ -43,11 +45,22 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 - `trg_bloqueio_checklist` — checklist "não apto" bloqueia o veículo; "apto" libera.
 
 ### Acesso e papéis
-- **Gestor** entra com e-mail real completo → vai para `/`.
-- **Técnico** entra só com o usuário (ex.: `igor`) → o app completa com
-  `@frota.local` → vai para `/campo`. O proxy (`lib/supabase/middleware.ts`)
-  bloqueia técnico em `/` e `/veiculos`. A RLS já isola os dados por pessoa.
+Quatro papéis, na coluna `tecnicos.papel`. Cada um cai numa tela inicial e o
+proxy (`lib/supabase/middleware.ts`) devolve quem bater na porta errada. A RLS
+é quem isola os dados de verdade — o proxy só evita tela inútil.
+
+| Papel | Entra em | Pode |
+|---|---|---|
+| `GESTOR` | `/` | tudo |
+| `PCM` | `/` | manutenção (abrir, fechar, imprimir OS), checklists, alertas, histórico. Não cadastra veículo nem lança roteiro |
+| `PONTO` | `/ponto` | só leitura do horário dos roteiros. Não escreve em nada |
+| `TECNICO` | `/campo` | os roteiros dele, checklist, ocorrência |
+
+- **Gestor** entra com e-mail real completo; os demais entram só com o usuário
+  (ex.: `igor`) e o app completa com `@frota.local`.
 - 13 técnicos cadastrados e vinculados a logins internos.
+- Para criar PCM e ponto: `supabase/manual/cadastrar_pcm_e_ponto.sql` (modelo,
+  tem senha dentro — não commitar preenchido).
 
 ### Storage (buckets públicos)
 `checklists` (fotos do checklist) · `roteiros` (foto do painel/hodômetro) ·
@@ -199,6 +212,39 @@ resolver antes de mostrar para a equipe.
 
 **Passo 6 — equipe.** Instalar o PWA e usar `/campo`. O técnico entra só com o
 usuário (ex.: `igor`); o app completa com `@frota.local`.
+
+### Km alto e conferência (feito)
+O caso real: roteiro para Minas com 1.827 km recusado pelo app; o veículo ficou
+"na rua" e o gestor teve que fechar por SQL. Aconteceu duas vezes (TTP8H79 e
+TTZ7I26). O teto de 600 km tratava viagem longa e digitação errada como a mesma
+coisa.
+
+Agora são três faixas (`supabase/migrations/0010_km_alto.sql`):
+- chegada menor que a saída → impossível, barra no banco;
+- acima de **5.000 km** → é o hodômetro digitado no lugar do km, barra com uma
+  mensagem que explica o que fazer;
+- acima de **600 km** → passa. O técnico confirma e diz para onde foi; o roteiro
+  nasce como `CONCLUÍDO - KM ALTO VERIFICAR` na coluna **Pendências** do painel,
+  com a justificativa no cartão e um botão **✓ Km conferido**.
+
+Conferido, grava `km_verificado_em` / `km_verificado_por` e sai da fila. A
+situação continua sendo calculada na view — o que se grava é a decisão de quem
+conferiu, não um número derivado. Prova: `supabase/tests/km_alto.test.sql`.
+
+### Horários dos roteiros (feito)
+Os horários sempre foram gravados; não apareciam em lugar nenhum depois do
+fechamento. Agora `v_roteiros` entrega `hora_saida`, `hora_chegada` e
+`duracao_min` prontos (fuso de São Paulo, como manda o 0009), e eles aparecem no
+cartão de "Concluídos hoje", na ficha do veículo, no CSV de roteiros e na tela
+`/ponto`.
+
+### Ordem de serviço (feito)
+`/manutencao/ordem?id=<uuid>` monta uma folha A4 para imprimir: cabeçalho com o
+número da ordem, dados do veículo, o que fazer, e a metade de baixo em branco
+para a oficina preencher à mão (serviços, peças, km de entrega, valor,
+assinaturas). O link aparece no cartão da manutenção, na ficha do painel e num
+aviso verde logo depois de abrir a ordem — que é quando o veículo ainda está
+com quem vai levar. O papel não grava nada: o resultado volta para `/manutencao`.
 
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de

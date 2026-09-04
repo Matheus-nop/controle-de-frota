@@ -19,7 +19,9 @@ function one<T>(rel: T | T[] | null): T | null {
 export default function CampoPage() {
   const [abertos, setAbertos] = useState<Aberto[]>([]);
   const [nome, setNome] = useState<string | null>(null);
-  const [ehGestor, setEhGestor] = useState(false);
+  // Quem tem tela propria alem de /campo ganha um atalho no rodape. Cada papel
+  // tem UMA: o proxy manda quem errar de porta de volta para a dele.
+  const [atalho, setAtalho] = useState<{ href: string; texto: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -40,7 +42,9 @@ export default function CampoPage() {
       setAbertos((rot.data as Aberto[]) ?? []);
       const meu = eu.data as { nome?: string; papel?: string } | null;
       setNome(meu?.nome ?? null);
-      setEhGestor(meu?.papel === "GESTOR");
+      if (meu?.papel === "GESTOR") setAtalho({ href: "/", texto: "Painel completo (gestor) →" });
+      else if (meu?.papel === "PCM") setAtalho({ href: "/", texto: "Painel da frota (PCM) →" });
+      else if (meu?.papel === "PONTO") setAtalho({ href: "/ponto", texto: "Conferência de ponto →" });
     })();
   }, []);
 
@@ -114,9 +118,9 @@ export default function CampoPage() {
         </div>
 
         <div style={{ marginTop: 28, textAlign: "center", display: "flex", flexDirection: "column", gap: 10 }}>
-          {ehGestor && (
-            <a href="/" style={{ fontSize: 13, color: "#2B4C8C", textDecoration: "none", fontWeight: 600 }}>
-              Painel completo (gestor) →
+          {atalho && (
+            <a href={atalho.href} style={{ fontSize: 13, color: "#2B4C8C", textDecoration: "none", fontWeight: 600 }}>
+              {atalho.texto}
             </a>
           )}
           <form action="/auth/signout" method="post">

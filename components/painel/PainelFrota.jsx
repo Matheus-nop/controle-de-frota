@@ -1,11 +1,20 @@
 "use client";
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 /* ============================ utilidades ============================ */
 const nf = new Intl.NumberFormat("pt-BR");
 const brl = (n) => (n == null ? "—" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 const km = (n) => (n == null ? "—" : nf.format(Math.round(n)) + " km");
 const dataBR = (s) => (s ? s.slice(8, 10) + "/" + s.slice(5, 7) : "—");
+// "08:55 → 17:20 · 8h25". O horario ja vem convertido para São Paulo em
+// lib/frota/tempo.ts — aqui é só a montagem do texto.
+const janela = (r) => {
+  const ida = r.hs || "—";
+  const volta = r.hc || (r.st === "PENDENTE DE CHEGADA" ? "na rua" : "—");
+  return r.dur ? `${ida} → ${volta} · ${r.dur}` : `${ida} → ${volta}`;
+};
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 function VehIcon() {
@@ -25,11 +34,12 @@ function Plate({ p }) {
 }
 
 /* ============================ componente ============================ */
-export default function PainelFrota({ dados, referencia }) {
+export default function PainelFrota({ dados, referencia, papel = "GESTOR" }) {
   const DADOS = dados;
   const REF = referencia;
   const [view, setView] = useState("operacao");
   const [sel, setSel] = useState(null);
+  const soGestor = papel === "GESTOR";
 
   // Vem pronto da view v_alertas_ativos. Fica vazio enquanto o painel estiver
   // caindo no seed, e o botao aparece sem contador.
@@ -54,7 +64,11 @@ export default function PainelFrota({ dados, referencia }) {
       .sort((a, b) => (b.kmr || 0) - (a.kmr || 0));
 
     const concluidos = roteiros.filter((r) => (r.st || "").startsWith("CONCLUÍDO"));
-    const concluidosHoje = concluidos.filter((r) => r.dc === REF || (r.dc == null && r.ds === REF));
+    // O roteiro de km alto aparece em Pendências; repetir aqui daria dois
+    // cartões para o mesmo roteiro no mesmo quadro.
+    const concluidosHoje = concluidos.filter(
+      (r) => (r.dc === REF || (r.dc == null && r.ds === REF)) && r.st !== "CONCLUÍDO - KM ALTO VERIFICAR",
+    );
 
     const doMes = roteiros.filter((r) => r.ds && r.ds.startsWith(mesRef) && r.kmr);
     const kmMes = doMes.reduce((s, r) => s + r.kmr, 0);
@@ -62,6 +76,9 @@ export default function PainelFrota({ dados, referencia }) {
 
     const ativos = veiculos.filter((v) => v.status === "ATIVO");
     const bloqueados = veiculos.filter((v) => v.status === "BLOQUEADO");
+    // Está na oficina: fora da operação, mas continua sendo da frota. Sem esta
+    // lista o veículo simplesmente sumia da tela enquanto durava o conserto.
+    const emManutencao = veiculos.filter((v) => v.status === "MANUTENCAO");
 
     const frota = ativos.map((v) => {
       const falta = v.revisao != null && v.km != null ? v.revisao - v.km : null;
@@ -90,11 +107,11 @@ export default function PainelFrota({ dados, referencia }) {
 
     return {
       veiculos, roteiros, manutencoes, checklists, porPlaca,
-      naRua, concluidosHoje, concluidos, pend, bloqueados, bloqInfo,
+      naRua, concluidosHoje, concluidos, pend, bloqueados, bloqInfo, emManutencao,
       kmMes, custoMes, ativos, frota, revisoesVencidas, gastoManut,
       custos: [...custos].sort((a, b) => (b.total || 0) - (a.total || 0)),
     };
-  }, []);
+  }, [DADOS, REF]);
 
   const totalPend = m.pend.length;
   const d = new Date(REF + "T12:00:00");
@@ -144,13 +161,14 @@ export default function PainelFrota({ dados, referencia }) {
           <a className="btn primary" href="/roteiro/saida">+ Registrar saída</a>
           <a className="btn" href="/roteiro/chegada">Registrar chegada</a>
           <a className="btn" href="/checklist">Checklist</a>
-                    <a className="btn" href="/manutencao">Manutenção</a>
-                    <a className="btn" href="/ocorrencias">Ocorrências</a>
-                    <a className={nCriticos > 0 ? "btn alerta-on" : "btn"} href="/alertas">
-                      Alertas{nAlertas > 0 && <span className="dotn">{nAlertas}</span>}
-                    </a>
-                    <a className="btn" href="/historico">Histórico</a>
-                    <a className="btn" href="/veiculos">Veículos</a>
+          <a className="btn" href="/manutencao">Manutenção</a>
+          {soGestor && <a className="btn" href="/ocorrencias">Ocorrências</a>}
+          <a className={nCriticos > 0 ? "btn alerta-on" : "btn"} href="/alertas">
+            Alertas{nAlertas > 0 && <span className="dotn">{nAlertas}</span>}
+          </a>
+          <a className="btn" href="/historico">Histórico</a>
+          {soGestor && <a className="btn" href="/ponto">Ponto</a>}
+          {soGestor && <a className="btn" href="/veiculos">Veículos</a>}
           <a className="btn rel" onClick={() => setView("relatorios")}>↧ Relatórios</a>
         </div>
 
@@ -192,6 +210,7 @@ function Operacao({ m, onSel, referencia }) {
         <Kpi lbl="Custo no mês" val={brl(m.custoMes)} sub="combustível est." />
         <Kpi lbl="Revisões vencidas" val={m.revisoesVencidas} sub="verificar" tom={m.revisoesVencidas > 0 ? "crit" : null} />
         <Kpi lbl="Bloqueados" val={m.bloqueados.length} sub="aguardando reparo" tom={m.bloqueados.length > 0 ? "crit" : null} />
+        <Kpi lbl="Em manutenção" val={m.emManutencao.length} sub="na oficina" tom={m.emManutencao.length > 0 ? "warn" : null} />
       </section>
 
       <div className="board-head">
@@ -215,6 +234,7 @@ function Operacao({ m, onSel, referencia }) {
             <Card key={i} onClick={() => onSel(r.placa)}>
               <div className="card-top"><Thumb foto={m.porPlaca[r.placa]?.foto} /><Plate p={r.placa} /><span className="card-model">{r.veic.split(" - ")[0]}</span></div>
               <div className="card-tec">{r.tec || "—"}</div>
+              <div className="card-hora mono">{janela(r)}</div>
               <div className="card-meta"><span><b className="mono">{nf.format(r.kmr || 0)}</b> km</span><span>{brl((r.kmr || 0) * (m.porPlaca[r.placa]?.custoKm || 0))}</span></div>
             </Card>
           ))}
@@ -226,9 +246,34 @@ function Operacao({ m, onSel, referencia }) {
             <Card key={i} onClick={() => onSel(r.placa)}>
               <div className="card-top"><Thumb foto={m.porPlaca[r.placa]?.foto} /><Plate p={r.placa} /><span className="card-model">{r.veic.split(" - ")[0]}</span><span className="tag warn ml-auto">{tag}</span></div>
               <div className="card-tec">{r.tec || "—"}</div>
-              <div className="card-meta"><span>{tag === "km alto" ? nf.format(r.kmr) + " km — verificar" : "Saiu " + dataBR(r.ds) + " " + (r.hs || "")}</span></div>
+              {tag === "km alto" ? (
+                <>
+                  <div className="card-meta"><span><b className="mono">{nf.format(r.kmr)}</b> km em {dataBR(r.ds)}</span></div>
+                  <div className="card-hora mono">{janela(r)}</div>
+                  {r.obsc && <div className="card-just">{r.obsc}</div>}
+                  <Conferir roteiro={r} />
+                </>
+              ) : (
+                <div className="card-meta"><span>Saiu {dataBR(r.ds)} {r.hs || ""}</span></div>
+              )}
             </Card>
           ))}
+        </Coluna>
+
+        <Coluna cor="var(--warn)" titulo="Em manutenção" n={m.emManutencao.length} vazio="Nenhum veículo na oficina.">
+          {m.emManutencao.map((v, i) => {
+            // a ordem de serviço aberta mais recente deste veículo
+            const ordem = m.manutencoes
+              .filter((x) => x.placa === v.placa && x.status !== "CONCLUÍDA" && x.status !== "CANCELADA")
+              .sort((a, b) => (b.data || "").localeCompare(a.data || ""))[0];
+            return (
+              <Card key={i} onClick={() => onSel(v.placa)}>
+                <div className="card-top"><Thumb foto={v.foto} /><Plate p={v.placa} /><span className="card-model">{v.modelo}</span>{ordem?.prio && <span className="tag warn ml-auto">{String(ordem.prio).toLowerCase()}</span>}</div>
+                <div className="card-tec">{ordem?.prob || "Em manutenção"}</div>
+                <div className="card-meta"><span>{ordem?.oficina || "oficina não informada"}</span><span>{ordem?.data ? dataBR(ordem.data) : ""}</span></div>
+              </Card>
+            );
+          })}
         </Coluna>
 
         <Coluna cor="var(--crit)" titulo="Bloqueados" n={m.bloqueados.length} vazio="Nenhum veículo bloqueado.">
@@ -247,6 +292,49 @@ function Operacao({ m, onSel, referencia }) {
   );
 }
 
+// "Km alto" some da fila quando alguem confere. Grava QUEM e QUANDO conferiu —
+// isso e decisao, nao calculo derivado, entao pode ser coluna (migration 0010).
+// A situacao do roteiro continua saindo pronta da view v_roteiros.
+function Conferir({ roteiro }) {
+  const router = useRouter();
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  // Sem id nao da para gravar: e o painel rodando com os dados de demonstracao.
+  if (!roteiro.id) return null;
+
+  async function marcar(e) {
+    e.stopPropagation();
+    setEnviando(true);
+    setErro(null);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: eu } = await supabase
+      .from("tecnicos").select("id").eq("user_id", user?.id).maybeSingle();
+
+    const { error } = await supabase
+      .from("roteiros")
+      .update({ km_verificado_em: new Date().toISOString(), km_verificado_por: eu?.id ?? null })
+      .eq("id", roteiro.id);
+
+    if (error) {
+      setErro(error.message);
+      setEnviando(false);
+    } else {
+      router.refresh();
+    }
+  }
+
+  return (
+    <div className="card-acao">
+      <button className="mini" onClick={marcar} disabled={enviando}>
+        {enviando ? "Marcando…" : "✓ Km conferido"}
+      </button>
+      {erro && <span className="card-erro">{erro}</span>}
+    </div>
+  );
+}
+
 function Coluna({ cor, titulo, n, vazio, children }) {
   const arr = React.Children.toArray(children);
   return (
@@ -259,8 +347,16 @@ function Coluna({ cor, titulo, n, vazio, children }) {
 
 /* ============================ FROTA ============================ */
 function Frota({ m, onSel }) {
-  const todos = [...m.frota, ...m.bloqueados.map((v) => ({ ...v, situacao: "bloq" }))];
-  const rot = { vencida: ["Revisão vencida", "warn"], proxima: ["Revisão próxima", "warn"], ok: ["OK", "ok"], sem: ["Sem revisão", "mute"], bloq: ["Bloqueado", "crit"] };
+  const todos = [
+    ...m.frota,
+    ...m.emManutencao.map((v) => ({ ...v, situacao: "oficina" })),
+    ...m.bloqueados.map((v) => ({ ...v, situacao: "bloq" })),
+  ];
+  const rot = {
+    vencida: ["Revisão vencida", "warn"], proxima: ["Revisão próxima", "warn"],
+    ok: ["OK", "ok"], sem: ["Sem revisão", "mute"],
+    oficina: ["Em manutenção", "warn"], bloq: ["Bloqueado", "crit"],
+  };
   return (
     <section className="grid-veic">
       {todos.map((v, i) => {
@@ -309,29 +405,111 @@ function Custos({ m }) {
 }
 
 /* ============================ MANUTENÇÕES ============================ */
+const TOM_STATUS = { "ABERTA": "warn", "EM EXECUÇÃO": "warn", "CONCLUÍDA": "ok", "CANCELADA": "mute" };
+
 function Manut({ m }) {
+  const [aberta, setAberta] = useState(null);
+  // as abertas primeiro: é o que ainda dá trabalho
+  const lista = [...m.manutencoes].sort((a, b) => {
+    const fechada = (x) => (x.status === "CONCLUÍDA" || x.status === "CANCELADA" ? 1 : 0);
+    return fechada(a) - fechada(b) || (b.data || "").localeCompare(a.data || "");
+  });
   return (
     <>
-      <div className="board-head"><h2>Manutenções</h2><span className="hint">{m.manutencoes.length} registro(s)</span></div>
+      <div className="board-head">
+        <h2>Manutenções</h2>
+        <span className="hint">toque numa ordem para ver peças e serviços</span>
+      </div>
       <section className="panel">
-        {m.manutencoes.map((x, i) => (
-          <div key={i} className="man">
-            <div className="man-head"><Plate p={x.placa} /><span className="mute-xs">{x.tipo || "—"}</span><span className="tag mute">{x.status || "—"}</span><span className="mono forte ml-auto">{brl(x.valor)}</span></div>
+        {lista.map((x, i) => (
+          <div key={i} className="man man-click" onClick={() => setAberta(x)}>
+            <div className="man-head">
+              <Plate p={x.placa} />
+              <span className="mute-xs">{x.tipo || "—"}</span>
+              <span className={"tag " + (TOM_STATUS[x.status] || "mute")}>{x.status || "—"}</span>
+              <span className="mono forte ml-auto">{brl(x.valor ?? x.orcamento)}</span>
+            </div>
             <div className="man-serv">{x.servico || x.prob || "—"}</div>
-            <div className="mute-xs">{dataBR(x.data)} · {x.oficina || "—"}</div>
+            <div className="mute-xs">
+              {dataBR(x.data)} · {x.oficina || "oficina não informada"}
+              {x.pecas ? " · peças trocadas" : ""}
+              {x.notaFiscal ? " · com nota" : ""}
+            </div>
           </div>
         ))}
-        {m.manutencoes.length === 0 && <div className="empty">Nenhuma manutenção registrada.</div>}
+        {lista.length === 0 && <div className="empty">Nenhuma manutenção registrada.</div>}
       </section>
+      {aberta && <FichaManut man={aberta} onClose={() => setAberta(null)} />}
     </>
+  );
+}
+
+// O que o gestor abre a ordem para ver: o que foi feito, o que foi trocado,
+// quanto custou e onde está a nota. Editar continua sendo em /manutencao —
+// o painel é de leitura.
+function FichaManut({ man, onClose }) {
+  const blocos = [
+    ["Problema relatado", man.prob],
+    ["Serviço realizado", man.servico],
+    ["Peças substituídas", man.pecas],
+  ].filter(([, v]) => v);
+
+  return (
+    <div className="modal" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <div className="card-top">
+            <Plate p={man.placa} />
+            <span className="card-model">{(man.veic || "").split(" - ")[0]}</span>
+            <span className={"tag " + (TOM_STATUS[man.status] || "mute")}>{man.status || "—"}</span>
+          </div>
+          <button className="fechar" onClick={onClose}>✕</button>
+        </div>
+        <div className="sheet-sub">
+          {man.tipo || "—"} · {man.origem || "origem não informada"}
+          {man.prio ? " · prioridade " + String(man.prio).toLowerCase() : ""}
+        </div>
+
+        <div className="mini-kpis">
+          <div><div className="mute-xs">Aberta em</div><div className="forte mono">{dataBR(man.data)}</div></div>
+          <div><div className="mute-xs">Concluída em</div><div className="forte mono">{man.conclusao ? dataBR(man.conclusao) : "—"}</div></div>
+          <div><div className="mute-xs">Km na abertura</div><div className="forte mono">{km(man.km)}</div></div>
+          <div><div className="mute-xs">Valor final</div><div className="forte mono">{brl(man.valor)}</div></div>
+        </div>
+
+        {blocos.map(([titulo, texto]) => (
+          <React.Fragment key={titulo}>
+            <h4>{titulo}</h4>
+            <p className="man-texto">{texto}</p>
+          </React.Fragment>
+        ))}
+        {blocos.length === 0 && <p className="mute-xs">Nada descrito nesta ordem ainda.</p>}
+
+        <h4>Ordem</h4>
+        <div className="linha"><span className="mute-xs">Oficina</span><span className="ml-auto">{man.oficina || "—"}</span></div>
+        <div className="linha"><span className="mute-xs">Responsável</span><span className="ml-auto">{man.responsavel || "—"}</span></div>
+        <div className="linha"><span className="mute-xs">Orçamento</span><span className="mono ml-auto">{brl(man.orcamento)}</span></div>
+        {man.proximaRevisao != null && (
+          <div className="linha"><span className="mute-xs">Próxima revisão</span><span className="mono ml-auto">{km(man.proximaRevisao)}</span></div>
+        )}
+
+        {man.notaFiscal && (
+          <a className="btn ficha-hist" href={man.notaFiscal} target="_blank" rel="noopener noreferrer">
+            🧾 Abrir nota fiscal →
+          </a>
+        )}
+        <a className="btn ficha-hist" href={"/manutencao/ordem?id=" + man.id}>🖨 Ordem de serviço para imprimir →</a>
+        <a className="btn ficha-hist" href="/manutencao">🔧 Editar em Manutenções →</a>
+      </div>
+    </div>
   );
 }
 
 /* ============================ RELATÓRIOS ============================ */
 function Relatorios({ m, referencia }) {
   function baixarCSV() {
-    const linhas = [["placa", "veiculo", "data_saida", "hora_saida", "data_chegada", "tecnico", "km_saida", "km_chegada", "km_rodado", "situacao"]];
-    m.roteiros.forEach((r) => linhas.push([r.placa, (r.veic || "").split(" - ")[0], r.ds || "", r.hs || "", r.dc || "", r.tec || "", r.kms ?? "", r.kmc ?? "", r.kmr ?? "", r.st || ""]));
+    const linhas = [["placa", "veiculo", "data_saida", "hora_saida", "data_chegada", "hora_chegada", "duracao", "tecnico", "km_saida", "km_chegada", "km_rodado", "situacao"]];
+    m.roteiros.forEach((r) => linhas.push([r.placa, (r.veic || "").split(" - ")[0], r.ds || "", r.hs || "", r.dc || "", r.hc || "", r.dur || "", r.tec || "", r.kms ?? "", r.kmc ?? "", r.kmr ?? "", r.st || ""]));
     const csv = linhas.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
@@ -393,7 +571,12 @@ function Ficha({ placa, m, onClose }) {
 
         <h4>Últimos roteiros</h4>
         {rots.length === 0 ? <p className="mute-xs">Sem roteiros.</p> : rots.map((r, i) => (
-          <div key={i} className="linha"><span className="mono">{dataBR(r.ds)}</span><span className="mute-xs">{r.tec || "—"}</span><span className="mono ml-auto">{r.kmr != null ? nf.format(r.kmr) + " km" : r.st}</span></div>
+          <div key={i} className="linha linha-rot">
+            <span className="mono">{dataBR(r.ds)}</span>
+            <span className="mono mute-xs">{janela(r)}</span>
+            <span className="mute-xs">{r.tec || "—"}</span>
+            <span className="mono ml-auto">{r.kmr != null ? nf.format(r.kmr) + " km" : r.st}</span>
+          </div>
         ))}
 
         {mans.length > 0 && <><h4>Manutenções</h4>{mans.map((x, i) => (
@@ -453,9 +636,10 @@ const CSS = `
 .ficha-hist{width:100%;justify-content:center;margin-top:18px}
 .btn.alerta-on{border-color:var(--crit);color:var(--crit)}
 
-.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:24px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
 .kpis-3{grid-template-columns:repeat(3,1fr)}
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}}
+.kpi .val.warn{color:var(--warn)}
 @media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow)}
 .kpi .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
@@ -466,7 +650,8 @@ const CSS = `
 .board-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .board-head h2{font-size:15px;font-weight:650;margin:0}
 .board-head .hint{font-size:12px;color:var(--ink-3)}
-.board{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;align-items:start}
+@media(max-width:1240px){.board{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:980px){.board{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.board{grid-template-columns:1fr}}
 .col{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -485,6 +670,13 @@ const CSS = `
 .card-tec{font-size:13px;font-weight:600;margin-bottom:6px}
 .card-meta{display:flex;gap:12px;font-size:11.5px;color:var(--ink-2)}
 .card-meta b{color:var(--ink);font-weight:650}
+.card-hora{font-size:11.5px;color:var(--ink-2);margin-bottom:5px;letter-spacing:-.01em}
+.card-just{font-size:11.5px;color:var(--ink-2);background:var(--surface-2);border-radius:6px;padding:6px 8px;margin-top:7px;line-height:1.4}
+.card-acao{margin-top:9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mini{font-size:11.5px;font-weight:650;padding:5px 10px;border-radius:7px;border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);cursor:pointer}
+.mini:hover{border-color:var(--ok);color:var(--ok)}
+.mini:disabled{opacity:.55;cursor:default}
+.card-erro{font-size:11px;color:var(--crit)}
 .tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 7px;border-radius:5px}
 .tag.warn{background:var(--warn-bg);color:var(--warn)}
 .tag.crit{background:var(--crit-bg);color:var(--crit)}
@@ -511,6 +703,9 @@ const CSS = `
 .man:first-child{border-top:none}
 .man-head{display:flex;align-items:center;gap:9px;margin-bottom:4px;flex-wrap:wrap}
 .man-serv{font-size:13.5px;margin-bottom:2px}
+.man-click{cursor:pointer;padding-left:6px;padding-right:6px;margin-left:-6px;margin-right:-6px;border-radius:8px}
+.man-click:hover{background:var(--surface-2)}
+.man-texto{font-size:13.5px;line-height:1.5;margin:4px 0 0;white-space:pre-wrap}
 
 .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
 .rel-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:var(--shadow)}
@@ -523,6 +718,7 @@ const CSS = `
 
 .linha{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);font-size:13px}
 .linha .mute-xs{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.linha-rot{flex-wrap:wrap;gap:6px 10px}
 
 .modal{position:fixed;inset:0;background:rgba(16,26,38,.55);z-index:40;display:flex;align-items:flex-end;justify-content:center}
 @media(min-width:700px){.modal{align-items:center;padding:24px}}

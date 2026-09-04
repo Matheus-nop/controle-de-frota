@@ -241,10 +241,14 @@ function ManutCard({ m, tecnicos, onSalvo }: { m: Manut; tecnicos: Tecnico[]; on
         </a>
       )}
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => setAberto((x) => !x)} style={{ background: "none", border: "1px solid #DBE0EA", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, color: "#2B4C8C", cursor: "pointer" }}>
           {aberto ? "Fechar" : "Registrar andamento"}
         </button>
+        {/* o papel que vai com o veículo para a oficina */}
+        <a href={`/manutencao/ordem?id=${m.id}`} style={{ display: "inline-block", border: "1px solid #DBE0EA", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, color: "#53607A", textDecoration: "none" }}>
+          🖨 Ordem de serviço
+        </a>
       </div>
 
       {aberto && (
@@ -307,6 +311,9 @@ function NovaManutencao({ veiculos, tecnicos, onCriada }: { veiculos: Veiculo[];
   const [bloquear, setBloquear] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // id da ordem recem-aberta: e so para oferecer a impressao na hora, que e
+  // quando o veiculo ainda esta na mao de quem vai levar para a oficina.
+  const [criadaId, setCriadaId] = useState<string | null>(null);
 
   async function criar(e: React.FormEvent) {
     e.preventDefault();
@@ -317,7 +324,7 @@ function NovaManutencao({ veiculos, tecnicos, onCriada }: { veiculos: Veiculo[];
     }
     setSalvando(true);
     const supabase = createClient();
-    const { error } = await supabase.from("manutencoes").insert({
+    const { data: criada, error } = await supabase.from("manutencoes").insert({
       veiculo_id: veiculoId,
       km_abertura: intOrNull(km),
       origem: origem || null,
@@ -328,7 +335,7 @@ function NovaManutencao({ veiculos, tecnicos, onCriada }: { veiculos: Veiculo[];
       oficina: oficina.trim() || null,
       orcamento: numOrNull(orcamento),
       status: "ABERTA",
-    });
+    }).select("id").single();
     if (error) {
       setErro(error.message);
       setSalvando(false);
@@ -337,12 +344,29 @@ function NovaManutencao({ veiculos, tecnicos, onCriada }: { veiculos: Veiculo[];
     if (bloquear) {
       await supabase.from("veiculos").update({ status: "MANUTENCAO" }).eq("id", veiculoId);
     }
+    setCriadaId((criada as { id: string } | null)?.id ?? null);
     onCriada();
   }
 
   return (
     <form onSubmit={criar} style={{ background: "#fff", border: "1px solid #2B4C8C", borderRadius: 12, padding: 16, marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Abrir manutenção</h3>
+
+      {criadaId && (
+        <div style={{ background: "#E5F4EE", border: "1px solid #B6DECB", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#146848" }}>Manutenção aberta.</div>
+          <p style={{ fontSize: 12.5, color: "#146848", margin: "5px 0 9px", lineHeight: 1.45 }}>
+            Imprima a ordem de serviço e mande junto com o veículo — é o que orienta a oficina
+            e volta preenchido para você lançar aqui.
+          </p>
+          <a
+            href={`/manutencao/ordem?id=${criadaId}`}
+            style={{ display: "inline-block", background: "#fff", border: "1px solid #B6DECB", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, color: "#146848", textDecoration: "none" }}
+          >
+            🖨 Imprimir ordem de serviço
+          </a>
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
         <Campo>
           <label style={lbl}>Veículo *</label>
