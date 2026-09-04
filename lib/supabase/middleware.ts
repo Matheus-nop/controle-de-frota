@@ -4,12 +4,41 @@ import { NextResponse, type NextRequest } from "next/server";
 // Rotas que nao exigem login.
 const ROTAS_PUBLICAS = ["/login", "/auth", "/api/health"];
 
-// Rotas exclusivas do GESTOR. Tecnico que tentar entrar volta para /campo.
-// Atencao: /ocorrencia (singular, o relato do tecnico) NAO entra aqui — quem
-// e do gestor e a fila /ocorrencias (plural).
-const ROTAS_GESTOR = ["/veiculos", "/ocorrencias", "/historico", "/alertas"];
+type Papel = "GESTOR" | "PCM" | "PONTO" | "TECNICO";
 
-// A raiz "/" e o painel do gestor; o tecnico e mandado para /campo.
+// Quem entra onde. A RLS ja decide os DADOS; isto so evita que a pessoa caia
+// numa tela que ela nao vai conseguir usar.
+//
+// A ordem importa: vale a PRIMEIRA rota que casar, e "/" e comparada exata
+// (senao ela casaria com o site inteiro).
+//
+// Cuidado com os dois parecidos: /ocorrencia (singular) e o relato do tecnico
+// e fica livre; /ocorrencias (plural) e a fila do gestor.
+const ACESSO: Array<{ rota: string; papeis: Papel[] }> = [
+  { rota: "/veiculos", papeis: ["GESTOR"] },
+  { rota: "/usuarios", papeis: ["GESTOR"] },
+  { rota: "/ocorrencias", papeis: ["GESTOR"] },
+  { rota: "/historico", papeis: ["GESTOR", "PCM"] },
+  { rota: "/alertas", papeis: ["GESTOR", "PCM"] },
+  { rota: "/manutencao", papeis: ["GESTOR", "PCM"] },
+  { rota: "/ponto", papeis: ["GESTOR", "PONTO"] },
+  { rota: "/", papeis: ["GESTOR", "PCM"] },
+];
+
+// Onde cada papel cai quando bate numa porta que nao e dele.
+// Espelha telaInicial() de lib/supabase/papel.ts.
+function telaInicial(papel: Papel): string {
+  if (papel === "GESTOR" || papel === "PCM") return "/";
+  if (papel === "PONTO") return "/ponto";
+  return "/campo";
+}
+
+function regraDe(path: string) {
+  return ACESSO.find(({ rota }) =>
+    rota === "/" ? path === "/" : path === rota || path.startsWith(rota + "/"),
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -50,20 +79,22 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Guarda por papel: so consulta o cadastro nas rotas que precisam decidir.
-  const precisaPapel = path === "/" || ROTAS_GESTOR.some((r) => path === r || path.startsWith(r + "/"));
+  // So consulta o cadastro nas rotas que precisam decidir por papel.
+  const regra = user ? regraDe(path) : undefined;
 
-  if (user && precisaPapel) {
+  if (user && regra) {
     const { data } = await supabase
       .from("tecnicos")
       .select("papel")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const ehGestor = data?.papel === "GESTOR";
-    if (!ehGestor) {
+    // Sem cadastro em tecnicos, trata como TECNICO: e o papel mais restrito.
+    const papel = (data?.papel as Papel) ?? "TECNICO";
+
+    if (!regra.papeis.includes(papel)) {
       const url = request.nextUrl.clone();
-      url.pathname = "/campo";
+      url.pathname = telaInicial(papel);
       return NextResponse.redirect(url);
     }
   }

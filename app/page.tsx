@@ -1,10 +1,17 @@
 import PainelFrota from "@/components/painel/PainelFrota";
 import { carregarDados } from "@/lib/frota/data";
+import { sessaoAtual } from "@/lib/supabase/papel";
 
 // Server Component: carrega os dados (views do Supabase, com fallback no seed)
 // e entrega ao painel. O middleware ja garante que so chega aqui quem esta logado.
 export default async function Home() {
-  const { dados, referencia, fonte } = await carregarDados();
+  // O papel decide quais atalhos aparecem. Quem chega aqui ja passou pelo
+  // proxy (so GESTOR e PCM), mas o PCM nao entra em Veiculos, Ocorrencias nem
+  // Ponto — botao que leva a um redirect e botao quebrado.
+  const [{ dados, referencia, fonte }, { papel }] = await Promise.all([
+    carregarDados(),
+    sessaoAtual(),
+  ]);
 
   return (
     <>
@@ -23,7 +30,7 @@ export default async function Home() {
           proxima fatia da Fase 3.
         </div>
       )}
-      <PainelFrota dados={dados} referencia={referencia} />
+      <PainelFrota dados={dados} referencia={referencia} papel={papel ?? "GESTOR"} />
     </>
   );
 }

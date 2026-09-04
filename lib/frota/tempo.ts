@@ -94,3 +94,23 @@ export function intervaloUTC(de: string, ate: string): { de: string; ate: string
     ate: instanteLocal(ate, "23:59:59.999"),
   };
 }
+
+/**
+ * "8h32" — quanto tempo passou entre dois instantes. Usado na conferência de
+ * roteiro: é o número que o time de ponto compara com a marcação da folha.
+ *
+ * Calculado a partir dos dois `timestamptz`, não do texto: instante menos
+ * instante não depende de fuso nem de o roteiro ter virado o dia.
+ */
+export function duracaoEntre(
+  inicio: string | Date | null | undefined,
+  fim: string | Date | null | undefined,
+): string | null {
+  const a = instante(inicio);
+  const b = instante(fim);
+  if (!a || !b) return null;
+  const min = Math.round((b.getTime() - a.getTime()) / 60000);
+  if (min < 0) return null;
+  const h = Math.floor(min / 60);
+  return h > 0 ? `${h}h${String(min % 60).padStart(2, "0")}` : `${min}min`;
+}

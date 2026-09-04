@@ -27,14 +27,17 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/` | Painel do gestor: kanban de operação, frota, custos, manutenções, relatórios (CSV/PDF), ficha do veículo | GESTOR |
 | `/campo` | Tela simples do técnico: 3 botões grandes + "na rua agora" | todos |
 | `/roteiro/saida` | Registrar saída (valida km, um roteiro aberto por veículo, foto do painel) | todos |
-| `/roteiro/chegada` | Registrar chegada (valida km ≥ saída e ≤ 600, pendência, foto) | todos |
+| `/roteiro/chegada` | Registrar chegada (km ≥ saída; acima de 600 km pede confirmação, acima de 5.000 barra) | todos |
 | `/checklist` | Checklist semanal (réplica do Google Forms: 7 seções, avaria condicional, bloqueio, fotos) | todos |
 | `/ocorrencia` | Relatar dano/acidente/avaria com foto obrigatória | todos |
 | `/ocorrencias` | Fila de ocorrências: tratar, resolver, virar manutenção | GESTOR |
-| `/historico` | Tudo que a equipe registrou, com as fotos, por veículo e período | GESTOR |
-| `/alertas` | O que precisa de atenção agora, com o botão que resolve cada caso | GESTOR |
-| `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR |
+| `/historico` | Tudo que a equipe registrou, com as fotos, por veículo e período | GESTOR, PCM |
+| `/alertas` | O que precisa de atenção agora, com o botão que resolve cada caso | GESTOR, PCM |
+| `/manutencao` | Abrir manutenção, registrar andamento, anexar nota fiscal | GESTOR, PCM |
+| `/manutencao/ordem?id=` | Ordem de serviço em A4 para imprimir e mandar com o veículo | GESTOR, PCM |
+| `/ponto` | Conferência de horário de saída e chegada, com CSV | GESTOR, PONTO |
 | `/veiculos` | Gestão de veículos (km, revisão, consumo, combustível, status, responsável) | GESTOR |
+| `/usuarios` | Cadastro de acesso: vincular login a pessoa, papel, desligar | GESTOR |
 | `/login` | Login por usuário + senha | público |
 | `/api/health` | Health-check do Supabase | público |
 
@@ -43,11 +46,64 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 - `trg_bloqueio_checklist` — checklist "não apto" bloqueia o veículo; "apto" libera.
 
 ### Acesso e papéis
-- **Gestor** entra com e-mail real completo → vai para `/`.
-- **Técnico** entra só com o usuário (ex.: `igor`) → o app completa com
-  `@frota.local` → vai para `/campo`. O proxy (`lib/supabase/middleware.ts`)
-  bloqueia técnico em `/` e `/veiculos`. A RLS já isola os dados por pessoa.
+Quatro papéis, na coluna `tecnicos.papel`. Cada um cai numa tela inicial e o
+proxy (`lib/supabase/middleware.ts`) devolve quem bater na porta errada. A RLS
+é quem isola os dados de verdade — o proxy só evita tela inútil.
+
+| Papel | Entra em | Pode |
+|---|---|---|
+| `GESTOR` | `/` | tudo |
+| `PCM` | `/` | manutenção (abrir, fechar, imprimir OS), checklists, alertas, histórico. Não cadastra veículo nem lança roteiro |
+| `PONTO` | `/ponto` | só leitura do horário dos roteiros. Não escreve em nada |
+| `TECNICO` | `/campo` | os roteiros dele, checklist, ocorrência |
+
+- **Gestor** entra com e-mail real completo; os demais entram só com o usuário
+  (ex.: `igor`) e o app completa com `@frota.local`.
 - 13 técnicos cadastrados e vinculados a logins internos.
+#### Como se cadastra alguém (decisão de 2026-09)
+Em duas etapas, e as duas são obrigatórias:
+
+1. **O login, no painel do Supabase.** Authentication → Add user → Create new
+   user. E-mail interno `primeiro.ultimo@frota.local` para quem não tem e-mail
+   de verdade, senha de 8+ caracteres, e **marcar `Auto Confirm User`** — sem
+   isso o GoTrue espera uma confirmação que nunca chega num `@frota.local` e o
+   login não entra.
+2. **A pessoa, na tela `/usuarios`.** O login novo aparece em "Logins
+   aguardando cadastro"; o gestor dá nome e papel. Sem esta etapa a pessoa
+   entra no app e **não é ninguém**: todo nome de roteiro, checklist e
+   manutenção é FK para `tecnicos`, e quem não tem essa linha cai em `/campo`
+   sem conseguir lançar nada.
+
+Quem já está no cadastro sem login (técnico antigo, gente vinda da planilha)
+aparece numa lista à parte no passo 2 — escolher ali evita a mesma pessoa
+virar dois registros e partir o histórico em dois.
+
+A lista de logins pendentes vem de `logins_sem_pessoa()`
+(`supabase/migrations/0012_logins_sem_pessoa.sql`), `security definer` porque
+`auth.users` não é exposta ao PostgREST — e com checagem de gestor na primeira
+linha do corpo, provada em `supabase/tests/logins_sem_pessoa.test.sql`.
+
+`supabase/manual/cadastrar_pcm_e_ponto.sql` continua no repositório como plano
+B para o **primeiro** gestor, quando ainda não há ninguém logado para cadastrar.
+
+#### O caminho opcional: criar login pelo próprio app
+Existe pronto, desligado por falta de uma variável. Se um dia
+`SUPABASE_SERVICE_ROLE_KEY` for configurada no ambiente do app (Vercel →
+Settings → Environment Variables; valor em Supabase → Project Settings → API →
+`service_role`), a tela `/usuarios` passa a criar login e trocar senha
+sozinha — ela pergunta ao servidor o que pode oferecer e se ajusta.
+
+Se for configurar um dia, dois cuidados:
+- **sem** o prefixo `NEXT_PUBLIC_` — com ele o Next embute a chave no bundle
+  que vai para o navegador, e ela ignora a RLS;
+- importada só em `lib/supabase/admin.ts`, usado apenas por `app/api/`.
+
+A chave executa a ação; quem autoriza é o cookie de sessão — `/api/usuarios`
+confirma que o chamador é `GESTOR` antes de qualquer coisa.
+
+**Enquanto ela não existir**, uma coisa fica pela metade e a tela avisa: desligar
+alguém tira a pessoa das listas do app, mas não bloqueia o login. Para ela parar
+de entrar de verdade: Supabase → Authentication → o usuário → Ban user.
 
 ### Storage (buckets públicos)
 `checklists` (fotos do checklist) · `roteiros` (foto do painel/hodômetro) ·
@@ -199,6 +255,47 @@ resolver antes de mostrar para a equipe.
 
 **Passo 6 — equipe.** Instalar o PWA e usar `/campo`. O técnico entra só com o
 usuário (ex.: `igor`); o app completa com `@frota.local`.
+
+### Km alto e conferência (feito)
+O caso real: roteiro para Minas com 1.827 km recusado pelo app; o veículo ficou
+"na rua" e o gestor teve que fechar por SQL. Aconteceu duas vezes (TTP8H79 e
+TTZ7I26). O teto de 600 km tratava viagem longa e digitação errada como a mesma
+coisa.
+
+Agora são três faixas (`supabase/migrations/0010_km_alto.sql`):
+- chegada menor que a saída → impossível, barra no banco;
+- acima de **5.000 km** → é o hodômetro digitado no lugar do km, barra com uma
+  mensagem que explica o que fazer;
+- acima de **600 km** → passa. O técnico confirma e diz para onde foi; o roteiro
+  nasce como `CONCLUÍDO - KM ALTO VERIFICAR` na coluna **Pendências** do painel,
+  com a justificativa no cartão e um botão **✓ Km conferido**.
+
+Conferido, grava `km_verificado_em` / `km_verificado_por` e sai da fila. A
+situação continua sendo calculada na view — o que se grava é a decisão de quem
+conferiu, não um número derivado. Prova: `supabase/tests/km_alto.test.sql`.
+
+**Armadilha que apareceu em produção:** a coluna de conferência nasce nula, e
+o histórico inteiro nasce junto com ela. No primeiro dia depois da 0010 a fila
+de pendências encheu de roteiro antigo — inclusive um que o gestor já tinha
+fechado à mão semanas antes. `0013_km_alto_historico.sql` marca como conferido
+tudo que fechou antes de a regra existir. A regra vale daqui para a frente;
+fila que acusa o passado é fila que se aprende a ignorar, e aí a viagem de
+1.800 km que interessa passa batido no meio do lixo.
+
+### Horários dos roteiros (feito)
+Os horários sempre foram gravados; não apareciam em lugar nenhum depois do
+fechamento. Agora `v_roteiros` entrega `hora_saida`, `hora_chegada` e
+`duracao_min` prontos (fuso de São Paulo, como manda o 0009), e eles aparecem no
+cartão de "Concluídos hoje", na ficha do veículo, no CSV de roteiros e na tela
+`/ponto`.
+
+### Ordem de serviço (feito)
+`/manutencao/ordem?id=<uuid>` monta uma folha A4 para imprimir: cabeçalho com o
+número da ordem, dados do veículo, o que fazer, e a metade de baixo em branco
+para a oficina preencher à mão (serviços, peças, km de entrega, valor,
+assinaturas). O link aparece no cartão da manutenção, na ficha do painel e num
+aviso verde logo depois de abrir a ordem — que é quando o veículo ainda está
+com quem vai levar. O papel não grava nada: o resultado volta para `/manutencao`.
 
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
