@@ -173,6 +173,7 @@ export default function PainelFrota({ dados, referencia, papel = "GESTOR" }) {
           {soGestor && <a className="btn" href="/ponto">Ponto</a>}
           {soGestor && <a className="btn" href="/veiculos">Veículos</a>}
           {soGestor && <a className="btn" href="/usuarios">Usuários</a>}
+          {soGestor && <a className="btn" href="/relatorios">Relatórios</a>}
           <a className="btn rel" onClick={() => setView("relatorios")}>↧ Relatórios</a>
         </div>
 
@@ -623,6 +624,14 @@ function Relatorios({ m, referencia }) {
     <>
       <div className="board-head"><h2>Relatórios</h2><span className="hint">exporte e imprima os dados da frota</span></div>
       <section className="rel-grid">
+        <div className="rel-card destaque">
+          <h3>Relatórios completos</h3>
+          <p className="mute-xs">
+            Combustível por veículo, km por dia e por mês, deslocamentos por técnico,
+            manutenções e ocorrências — com período e CSV em cada um.
+          </p>
+          <a className="btn primary" href="/relatorios">Abrir relatórios →</a>
+        </div>
         <div className="rel-card">
           <h3>Roteiros (planilha)</h3>
           <p className="mute-xs">Todos os roteiros com km, técnico e situação, para abrir no Excel.</p>
@@ -820,6 +829,7 @@ const CSS = `
 .rel-card h3{margin:0 0 6px;font-size:14.5px}
 .rel-card p{margin:0 0 14px}
 .rel-nums{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rel-card.destaque{border-color:var(--brand)}
 .rel-nums div{display:flex;flex-direction:column}
 .rel-nums b{font-size:18px}
 .rel-nums span{font-size:11px;color:var(--ink-3)}
