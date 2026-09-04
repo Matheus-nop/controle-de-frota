@@ -103,7 +103,10 @@ export default function PainelFrota({ dados, referencia, papel = "GESTOR" }) {
       return { v, motivo: c?.motivo, urg: c?.urg, data: c?.data, cond: c?.cond };
     });
 
-    const gastoManut = manutencoes.reduce((s, x) => s + (x.valor || 0), 0);
+    // mesma conta da aba Manutenções: cancelada não custou nada
+    const gastoManut = manutencoes.reduce(
+      (s, x) => s + (x.status === "CANCELADA" ? 0 : x.valor || 0), 0,
+    );
 
     return {
       veiculos, roteiros, manutencoes, checklists, porPlaca,
@@ -408,38 +411,135 @@ function Custos({ m }) {
 /* ============================ MANUTENÇÕES ============================ */
 const TOM_STATUS = { "ABERTA": "warn", "EM EXECUÇÃO": "warn", "CONCLUÍDA": "ok", "CANCELADA": "mute" };
 
+// Separa o que JA SAIU do caixa do que ainda vai sair. Ordem aberta com
+// orçamento não é gasto — é compromisso. Somar os dois num número só faria o
+// total da frota subir no dia em que alguém abre uma ordem, antes de a oficina
+// encostar no veículo.
+function contas(ordens) {
+  let gasto = 0;
+  let previsto = 0;
+  let abertas = 0;
+  for (const x of ordens) {
+    const cancelada = x.status === "CANCELADA";
+    const emAberto = x.status === "ABERTA" || x.status === "EM EXECUÇÃO";
+    if (emAberto) abertas++;
+    if (cancelada) continue;                       // cancelada não custou nada
+    if (x.valor != null) gasto += x.valor;         // valor final = dinheiro que saiu
+    else if (emAberto) previsto += x.orcamento || 0;
+  }
+  return { gasto, previsto, abertas };
+}
+
 function Manut({ m }) {
   const [aberta, setAberta] = useState(null);
-  // as abertas primeiro: é o que ainda dá trabalho
-  const lista = [...m.manutencoes].sort((a, b) => {
-    const fechada = (x) => (x.status === "CONCLUÍDA" || x.status === "CANCELADA" ? 1 : 0);
-    return fechada(a) - fechada(b) || (b.data || "").localeCompare(a.data || "");
-  });
+  const [expandida, setExpandida] = useState(null); // placa aberta na lista
+
+  // Agrupamento e soma acontecem aqui, na tela, e não viram coluna no banco —
+  // é a mesma regra do km do mês logo acima. O que o banco guarda é o valor de
+  // cada ordem; o total é sempre a soma do que existe agora.
+  const grupos = useMemo(() => {
+    const porPlaca = new Map();
+    for (const x of m.manutencoes) {
+      const g = porPlaca.get(x.placa) || { placa: x.placa, veic: x.veic, ordens: [] };
+      g.ordens.push(x);
+      porPlaca.set(x.placa, g);
+    }
+    return [...porPlaca.values()]
+      .map((g) => ({
+        ...g,
+        ...contas(g.ordens),
+        // dentro do veículo, as abertas primeiro; depois a mais recente
+        ordens: [...g.ordens].sort((a, b) => {
+          const fechada = (x) => (x.status === "CONCLUÍDA" || x.status === "CANCELADA" ? 1 : 0);
+          return fechada(a) - fechada(b) || (b.data || "").localeCompare(a.data || "");
+        }),
+      }))
+      .sort((a, b) => b.gasto - a.gasto || b.previsto - a.previsto);
+  }, [m.manutencoes]);
+
+  const total = contas(m.manutencoes);
+  const maior = Math.max(1, ...grupos.map((g) => g.gasto));
+
   return (
     <>
-      <div className="board-head">
-        <h2>Manutenções</h2>
-        <span className="hint">toque numa ordem para ver peças e serviços</span>
-      </div>
-      <section className="panel">
-        {lista.map((x, i) => (
-          <div key={i} className="man man-click" onClick={() => setAberta(x)}>
-            <div className="man-head">
-              <Plate p={x.placa} />
-              <span className="mute-xs">{x.tipo || "—"}</span>
-              <span className={"tag " + (TOM_STATUS[x.status] || "mute")}>{x.status || "—"}</span>
-              <span className="mono forte ml-auto">{brl(x.valor ?? x.orcamento)}</span>
-            </div>
-            <div className="man-serv">{x.servico || x.prob || "—"}</div>
-            <div className="mute-xs">
-              {dataBR(x.data)} · {x.oficina || "oficina não informada"}
-              {x.pecas ? " · peças trocadas" : ""}
-              {x.notaFiscal ? " · com nota" : ""}
-            </div>
-          </div>
-        ))}
-        {lista.length === 0 && <div className="empty">Nenhuma manutenção registrada.</div>}
+      <section className="kpis kpis-3">
+        <Kpi lbl="Gasto em manutenção" val={brl(total.gasto)} sub="já pago, frota inteira" />
+        <Kpi
+          lbl="Previsto em aberto"
+          val={brl(total.previsto)}
+          sub="orçado, ordem ainda na oficina"
+          tom={total.previsto > 0 ? "warn" : null}
+        />
+        <Kpi
+          lbl="Ordens abertas"
+          val={total.abertas}
+          sub={`de ${m.manutencoes.length} no total`}
+          tom={total.abertas > 0 ? "warn" : null}
+        />
       </section>
+
+      <div className="board-head">
+        <h2>Gasto por veículo</h2>
+        <span className="hint">toque num veículo para ver as ordens dele</span>
+      </div>
+
+      <section className="panel">
+        {grupos.map((g) => {
+          const escancarado = expandida === g.placa;
+          return (
+            <div key={g.placa} className="man-grupo">
+              <div
+                className="barra man-click"
+                onClick={() => setExpandida(escancarado ? null : g.placa)}
+              >
+                <div className="barra-top">
+                  <Plate p={g.placa} />
+                  <span className="mute-xs">{(g.veic || "").split(" - ")[0]}</span>
+                  <span className="mono forte ml-auto">{brl(g.gasto)}</span>
+                </div>
+                <div className="trilho"><div className="fill" style={{ width: (100 * g.gasto / maior) + "%" }} /></div>
+                <div className="mute-xs">
+                  {g.ordens.length} ordem(ns)
+                  {g.abertas > 0 ? ` · ${g.abertas} em aberto` : ""}
+                  {g.previsto > 0 ? ` · previsto ${brl(g.previsto)}` : ""}
+                  <span className="seta">{escancarado ? "▲" : "▼"}</span>
+                </div>
+              </div>
+
+              {escancarado && (
+                <div className="man-ordens">
+                  {g.ordens.map((x, i) => (
+                    <div key={i} className="man man-click" onClick={() => setAberta(x)}>
+                      <div className="man-head">
+                        <span className="mute-xs">{x.tipo || "—"}</span>
+                        <span className={"tag " + (TOM_STATUS[x.status] || "mute")}>{x.status || "—"}</span>
+                        <span className="mono forte ml-auto">
+                          {x.valor != null ? brl(x.valor) : x.orcamento != null ? brl(x.orcamento) + " orçado" : "—"}
+                        </span>
+                      </div>
+                      <div className="man-serv">{x.servico || x.prob || "—"}</div>
+                      <div className="mute-xs">
+                        {dataBR(x.data)} · {x.oficina || "oficina não informada"}
+                        {x.pecas ? " · peças trocadas" : ""}
+                        {x.notaFiscal ? " · com nota" : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {grupos.length === 0 && <div className="empty">Nenhuma manutenção registrada.</div>}
+      </section>
+
+      {grupos.length > 0 && (
+        <div className="legend">
+          Veículo sem manutenção não aparece aqui. &ldquo;Previsto&rdquo; é orçamento de ordem
+          ainda aberta — dinheiro que não saiu.
+        </div>
+      )}
+
       {aberta && <FichaManut man={aberta} onClose={() => setAberta(null)} />}
     </>
   );
@@ -580,7 +680,7 @@ function Ficha({ placa, m, onClose }) {
           </div>
         ))}
 
-        {mans.length > 0 && <><h4>Manutenções</h4>{mans.map((x, i) => (
+        {mans.length > 0 && <><h4>Manutenções · {brl(contas(mans).gasto)} neste veículo</h4>{mans.map((x, i) => (
           <div key={i} className="linha"><span className="mono">{dataBR(x.data)}</span><span className="mute-xs">{x.servico || x.prob}</span><span className="mono ml-auto">{brl(x.valor)}</span></div>
         ))}</>}
 
@@ -707,6 +807,13 @@ const CSS = `
 .man-click{cursor:pointer;padding-left:6px;padding-right:6px;margin-left:-6px;margin-right:-6px;border-radius:8px}
 .man-click:hover{background:var(--surface-2)}
 .man-texto{font-size:13.5px;line-height:1.5;margin:4px 0 0;white-space:pre-wrap}
+.man-grupo{border-top:1px solid var(--border)}
+.man-grupo:first-child{border-top:none}
+.man-grupo .barra{padding:12px 6px;margin:0 -6px;border-radius:8px;border-top:none}
+.man-grupo .barra:hover{background:var(--surface-2)}
+.seta{float:right;color:var(--ink-3);font-size:9px}
+.man-ordens{border-left:2px solid var(--border);padding-left:12px;margin:0 0 10px 4px}
+.man-ordens .man{padding:10px 0}
 
 .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
 .rel-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:var(--shadow)}
