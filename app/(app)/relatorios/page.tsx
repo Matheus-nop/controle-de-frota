@@ -310,7 +310,7 @@ function Combustivel({ roteiros, veiculos, sufixo, periodo }: {
       <section className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Kpi lbl="Custo de combustível" val={brl(custo)} sub={periodo} />
         <Kpi lbl="Km rodado" val={km(kmTotal)} sub="frota inteira" />
-        <Kpi lbl="Custo médio" val={"R$ " + (custo / (kmTotal || 1)).toFixed(2)} sub="por km" />
+        <Kpi lbl="Custo médio" val={brl(custo / (kmTotal || 1))} sub="por km" />
         <Kpi lbl="Litros (estimado)" val={litros ? nf.format(Math.round(litros)) + " L" : "—"} sub="pelo consumo cadastrado" />
       </section>
 

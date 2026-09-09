@@ -137,7 +137,10 @@ function Coluna({
           {n}
         </span>
       </div>
-      <div className="flex flex-col gap-2 px-2.5 pb-3">
+      {/* A coluna rola por dentro. Sem isto, um dia com 40 pendências estica a
+          página inteira e as outras colunas somem lá embaixo — que é o oposto
+          do que um quadro serve para fazer. */}
+      <div className="rolagem-fina flex max-h-[68vh] flex-col gap-2 overflow-y-auto px-2.5 pb-3">
         {itens.length ? itens : <p className="px-1 py-2 text-center text-[12px] text-slate-400">{vazio}</p>}
       </div>
     </div>
@@ -380,7 +383,7 @@ function Operacao({ m, onSel, referencia }: { m: any; onSel(p: string): void; re
         </span>
       </div>
 
-      <section className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+      <section className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Coluna cor="info" titulo="Na rua" n={m.naRua.length} vazio="Nenhum veículo na rua agora.">
           {m.naRua.map((r: RoteiroDados, i: number) => (
             <CartaoItem key={i} onClick={() => onSel(r.placa)}>
@@ -395,7 +398,7 @@ function Operacao({ m, onSel, referencia }: { m: any; onSel(p: string): void; re
         </Coluna>
 
         <Coluna cor="ok" titulo="Concluídos hoje" n={m.concluidosHoje.length} vazio="Nenhum roteiro fechado hoje ainda.">
-          {m.concluidosHoje.slice(0, 12).map((r: RoteiroDados, i: number) => (
+          {m.concluidosHoje.map((r: RoteiroDados, i: number) => (
             <CartaoItem key={i} onClick={() => onSel(r.placa)}>
               <TopoCartao foto={m.porPlaca[r.placa]?.foto as string} placa={r.placa} modelo={modeloDe(r.veic)} />
               <div className="mb-1 text-[13px] font-semibold text-slate-800">{r.tec || "—"}</div>
@@ -406,11 +409,6 @@ function Operacao({ m, onSel, referencia }: { m: any; onSel(p: string): void; re
               </div>
             </CartaoItem>
           ))}
-          {m.concluidosHoje.length > 12 && (
-            <p className="px-1 text-center text-[12px] text-slate-400">
-              + {m.concluidosHoje.length - 12} outros
-            </p>
-          )}
         </Coluna>
 
         <Coluna cor="atencao" titulo="Pendências" n={m.pend.length} vazio="Sem pendências. 👏">
@@ -615,7 +613,7 @@ function Custos({ m }: { m: any }) {
     <>
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         <Contador rotulo="Custo acumulado" valor={brl(total)} legenda="combustível, no período" />
-        <Contador rotulo="Custo médio" valor={"R$ " + (total / kmTot).toFixed(2)} legenda="por km rodado" />
+        <Contador rotulo="Custo médio" valor={brl(total / kmTot)} legenda="por km rodado" />
         <Contador rotulo="Manutenção" valor={brl(m.gastoManut)} legenda="no período" />
       </div>
 
@@ -635,7 +633,7 @@ function Custos({ m }: { m: any }) {
                 </div>
                 <Barra pct={(100 * (c.total || 0)) / max} />
                 <div className="mt-1.5 text-[12px] text-slate-500">
-                  {km(c.km)} · R$ {(c.medio || 0).toFixed(2)}/km
+                  {km(c.km)} · {brl(c.medio || 0)}/km
                 </div>
               </li>
             ))}
@@ -1023,7 +1021,7 @@ function Ficha({ placa, m, onFechar }: { placa: string; m: any; onFechar(): void
       <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200 sm:grid-cols-4">
         <Numero rotulo="Km atual" valor={km(v.km)} />
         <Numero rotulo="Próx. revisão" valor={v.revisao ? nf.format(v.revisao) : "—"} />
-        <Numero rotulo="Custo/km" valor={v.custoKm ? "R$ " + Number(v.custoKm).toFixed(2) : "—"} />
+        <Numero rotulo="Custo/km" valor={brl(v.custoKm as number | null)} />
         <Numero rotulo="Consumo" valor={v.kml ? v.kml + " km/l" : "—"} />
       </div>
 
