@@ -1,4 +1,4 @@
-// Formato de dados que o painel (components/painel/PainelFrota.jsx) espera.
+// Formato de dados que o painel (components/painel/PainelFrota.tsx) espera.
 // Espelha a antiga constante DADOS embutida. As views do Supabase sao mapeadas
 // para este formato em lib/frota/data.ts.
 

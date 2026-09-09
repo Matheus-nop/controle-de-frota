@@ -114,3 +114,18 @@ export function duracaoEntre(
   const h = Math.floor(min / 60);
   return h > 0 ? `${h}h${String(min % 60).padStart(2, "0")}` : `${min}min`;
 }
+
+/**
+ * Período padrão dos filtros: os últimos `dias` dias até hoje, no fuso de
+ * São Paulo.
+ *
+ * Fica aqui, e não solto na página, porque `new Date()` é impuro: chamado
+ * direto no corpo de um componente ele quebra a regra de pureza do React
+ * (e o valor mudaria a cada re-render). Use num inicializador preguiçoso:
+ * `useState(() => periodoPadrao(30).de)`.
+ */
+export function periodoPadrao(dias: number): { de: string; ate: string } {
+  const agora = new Date();
+  const antes = new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000);
+  return { de: diaISO(antes), ate: diaISO(agora) };
+}

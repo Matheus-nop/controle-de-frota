@@ -13,6 +13,21 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 - Toda entrada de km é validada contra o km anterior do veículo.
 - RLS ativa em todas as tabelas. Política nova exige teste que prove o bloqueio.
 - Português nos campos, tabelas e UI. É o idioma de quem usa.
+- Nada de estilo em linha nem de `<style>` por tela. Toda tela usa o kit em
+  `components/ui.tsx` e os tokens do `app/globals.css`. Peça nova é peça no kit.
+
+## Aparência
+O design system é o mesmo do app de Roteiros (`roteiros/src/index.css` e
+`roteiros/src/components/ui.tsx`) — a mesma pessoa alterna entre os dois no
+mesmo dia. Mudou lá, muda aqui.
+
+- `app/globals.css` — tokens da marca (`brand-*`, `acento-*`, `acao-*`) e os
+  utilitários `.campo`, `.rotulo`, `.tabela`, `.toque`, `.placa`.
+- `components/ui.tsx` — Botao, Cartao, Pagina, Contador, Modal, Badge, Campo…
+- `components/Casca.tsx` — topo, abas por papel, gaveta e menu do usuário.
+  Aplicada pelo route group `app/(app)/`; ficam de fora só `/login` e a ordem
+  de serviço em A4.
+- Ícones: `lucide-react`. Emoji não, que muda de desenho a cada aparelho.
 
 ## Vocabulário do domínio
 - **roteiro**: uma saída + a chegada correspondente. É a unidade de trabalho.
