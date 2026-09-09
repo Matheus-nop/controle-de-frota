@@ -1,8 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, ClipboardCheck, Truck, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { diaDe, diaISO, intervaloUTC } from "@/lib/frota/tempo";
+import { diaDe, intervaloUTC, periodoPadrao } from "@/lib/frota/tempo";
+import {
+  Badge,
+  Campo,
+  Cartao,
+  Carregando,
+  Checkbox,
+  Input,
+  Pagina,
+  Placa,
+  Select,
+  Vazio,
+  cx,
+  type Tom,
+} from "@/components/ui";
 
 // Consulta do gestor: tudo que a equipe registrou, com as fotos. As tres fontes
 // de foto que ja existem viram uma linha do tempo so — checklist (semanais,
@@ -25,16 +40,20 @@ type Registro = {
   fotos: Foto[];
 };
 
-const CORES: Record<string, string> = {
-  CHECKLIST: "#2B4C8C",
-  ROTEIRO: "#1B9E6B",
-  OCORRÊNCIA: "#C0392B",
+const TOM_TIPO: Record<string, Tom> = {
+  CHECKLIST: "info",
+  ROTEIRO: "ok",
+  "OCORRÊNCIA": "critico",
 };
-
-const EMOJI: Record<string, string> = {
-  CHECKLIST: "✅",
-  ROTEIRO: "🚚",
-  OCORRÊNCIA: "⚠️",
+const FAIXA_TIPO: Record<string, string> = {
+  CHECKLIST: "border-l-brand-600",
+  ROTEIRO: "border-l-emerald-600",
+  "OCORRÊNCIA": "border-l-red-600",
+};
+const ICONE: Record<string, LucideIcon> = {
+  CHECKLIST: ClipboardCheck,
+  ROTEIRO: Truck,
+  "OCORRÊNCIA": AlertTriangle,
 };
 
 function one<T>(rel: T | T[] | null): T | null {
@@ -50,23 +69,14 @@ function urls(v: unknown): string[] {
   return v.filter((x): x is string => typeof x === "string" && x.startsWith("http"));
 }
 
-const input: React.CSSProperties = {
-  width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #CBD5E1",
-  fontSize: 14, boxSizing: "border-box", background: "#fff",
-};
-const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#53607A", marginBottom: 4, display: "block" };
-
 export default function HistoricoPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  const hoje = diaISO(new Date());
-  const trintaDias = diaISO(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-
   const [veiculoId, setVeiculoId] = useState("");
-  const [de, setDe] = useState(trintaDias);
-  const [ate, setAte] = useState(hoje);
+  const [de, setDe] = useState(() => periodoPadrao(30).de);
+  const [ate, setAte] = useState(() => periodoPadrao(30).ate);
   const [tipo, setTipo] = useState("TODOS");
   const [soComFoto, setSoComFoto] = useState(false);
 
@@ -197,7 +207,9 @@ export default function HistoricoPage() {
   }, [de, ate, veiculoId]);
 
   useEffect(() => {
-    carregar();
+    (async () => {
+      await carregar();
+    })();
   }, [carregar]);
 
   const lista = registros
@@ -206,110 +218,117 @@ export default function HistoricoPage() {
   const totalFotos = lista.reduce((s, r) => s + r.fotos.length, 0);
 
   return (
-    <main style={{ minHeight: "100vh", background: "#EBEEF4", padding: 20 }}>
-      <div style={{ maxWidth: 880, margin: "0 auto" }}>
-        <a href="/" style={{ fontSize: 13, color: "#2B4C8C", textDecoration: "none" }}>← Voltar ao painel</a>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "10px 0 16px", flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Histórico e fotos</h1>
-          <span style={{ fontSize: 13, color: "#53607A" }}>
-            {lista.length} registro{lista.length === 1 ? "" : "s"} · {totalFotos} foto{totalFotos === 1 ? "" : "s"}
-          </span>
+    <Pagina
+      titulo="Histórico e fotos"
+      subtitulo={`${lista.length} registro(s) · ${totalFotos} foto(s)`}
+    >
+      <Cartao className="mb-3 p-3.5">
+        <div className="flex flex-wrap gap-2.5">
+          <Campo rotulo="Veículo" className="min-w-[180px] flex-[2_1_220px]">
+            <Select value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)}>
+              <option value="">Todos os veículos</option>
+              {veiculos.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.modelo} — {v.placa}
+                </option>
+              ))}
+            </Select>
+          </Campo>
+          <Campo rotulo="De" className="min-w-[130px] flex-[1_1_130px]">
+            <Input type="date" value={de} max={ate} onChange={(e) => setDe(e.target.value)} />
+          </Campo>
+          <Campo rotulo="Até" className="min-w-[130px] flex-[1_1_130px]">
+            <Input type="date" value={ate} min={de} onChange={(e) => setAte(e.target.value)} />
+          </Campo>
         </div>
 
-        <div style={{ background: "#fff", border: "1px solid #DBE0EA", borderRadius: 12, padding: 14, marginBottom: 14 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <div style={{ flex: "2 1 220px", minWidth: 180 }}>
-              <label style={lbl}>Veículo</label>
-              <select style={input} value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)}>
-                <option value="">Todos os veículos</option>
-                {veiculos.map((v) => <option key={v.id} value={v.id}>{v.modelo} — {v.placa}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: "1 1 130px", minWidth: 130 }}>
-              <label style={lbl}>De</label>
-              <input style={input} type="date" value={de} max={ate} onChange={(e) => setDe(e.target.value)} />
-            </div>
-            <div style={{ flex: "1 1 130px", minWidth: 130 }}>
-              <label style={lbl}>Até</label>
-              <input style={input} type="date" value={ate} min={de} onChange={(e) => setAte(e.target.value)} />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            {["TODOS", "CHECKLIST", "ROTEIRO", "OCORRÊNCIA"].map((f) => (
-              <button
-                key={f}
-                onClick={() => setTipo(f)}
-                style={{
-                  padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                  border: tipo === f ? "1px solid #2B4C8C" : "1px solid #DBE0EA",
-                  background: tipo === f ? "#2B4C8C" : "#fff",
-                  color: tipo === f ? "#fff" : "#53607A",
-                }}
-              >
-                {f === "TODOS" ? "Tudo" : f.charAt(0) + f.slice(1).toLowerCase() + "s"}
-              </button>
-            ))}
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#53607A", marginLeft: "auto" }}>
-              <input type="checkbox" checked={soComFoto} onChange={(e) => setSoComFoto(e.target.checked)} />
-              Só com foto
-            </label>
-          </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {["TODOS", "CHECKLIST", "ROTEIRO", "OCORRÊNCIA"].map((f) => (
+            <button
+              key={f}
+              onClick={() => setTipo(f)}
+              className={cx(
+                "rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition",
+                tipo === f
+                  ? "bg-brand-700 text-white ring-brand-700"
+                  : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50",
+              )}
+            >
+              {f === "TODOS" ? "Tudo" : f.charAt(0) + f.slice(1).toLowerCase() + "s"}
+            </button>
+          ))}
+          <label className="ml-auto flex items-center gap-2 text-[12.5px] text-slate-600">
+            <Checkbox checked={soComFoto} onChange={(e) => setSoComFoto(e.target.checked)} />
+            Só com foto
+          </label>
         </div>
+      </Cartao>
 
-        {carregando ? (
-          <p style={{ color: "#53607A", fontSize: 14 }}>Carregando…</p>
-        ) : lista.length === 0 ? (
-          <p style={{ color: "#8591A5", fontSize: 14 }}>
-            Nenhum registro nesse filtro. Tente ampliar o período ou tirar o filtro de veículo.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {lista.map((r) => <RegistroCard key={r.id} r={r} />)}
-          </div>
-        )}
-      </div>
-    </main>
+      {carregando ? (
+        <Cartao>
+          <Carregando />
+        </Cartao>
+      ) : lista.length === 0 ? (
+        <Vazio
+          titulo="Nenhum registro nesse filtro."
+          texto="Tente ampliar o período ou tirar o filtro de veículo."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {lista.map((r) => (
+            <CartaoRegistro key={r.id} r={r} />
+          ))}
+        </div>
+      )}
+    </Pagina>
   );
 }
 
-function RegistroCard({ r }: { r: Registro }) {
-  const cor = CORES[r.tipo];
+function CartaoRegistro({ r }: { r: Registro }) {
+  const Icone = ICONE[r.tipo];
   return (
-    <div style={{ background: "#fff", border: "1px solid #DBE0EA", borderLeft: `5px solid ${r.alerta ? "#C0392B" : cor}`, borderRadius: 12, padding: 16, boxShadow: "0 1px 2px rgba(22,35,60,.05)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 15 }}>{EMOJI[r.tipo]}</span>
-        <span style={{ fontWeight: 700, fontSize: 12.5, letterSpacing: ".04em", background: "#F4F6FB", border: "1px solid #C4CCDA", borderRadius: 6, padding: "2px 8px" }}>{r.placa}</span>
-        <span style={{ fontSize: 13, color: "#53607A" }}>{r.modelo}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", color: cor, background: cor + "18", borderRadius: 5, padding: "2px 8px" }}>{r.tipo}</span>
-        <span style={{ marginLeft: "auto", fontSize: 12.5, color: "#53607A", fontVariantNumeric: "tabular-nums" }}>{dataBR(r.data)}</span>
+    <Cartao
+      className={cx("border-l-4 p-4", r.alerta ? "border-l-red-600" : FAIXA_TIPO[r.tipo])}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Icone size={16} className="shrink-0 text-slate-400" />
+        <Placa>{r.placa}</Placa>
+        <span className="text-[13px] text-slate-500">{r.modelo}</span>
+        <Badge tom={TOM_TIPO[r.tipo]}>{r.tipo}</Badge>
+        <span className="ml-auto text-[12.5px] tabular-nums text-slate-500">{dataBR(r.data)}</span>
       </div>
 
-      <div style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 4px", color: r.alerta ? "#A5301F" : "#16233C" }}>{r.resumo}</div>
-      <div style={{ fontSize: 12, color: "#53607A" }}>
+      <div
+        className={cx(
+          "mb-1 mt-2.5 text-sm font-semibold",
+          r.alerta ? "text-red-700" : "text-slate-900",
+        )}
+      >
+        {r.resumo}
+      </div>
+      <div className="text-[12px] text-slate-500">
         {r.tecnico}
         {r.detalhe ? " · " + r.detalhe : ""}
       </div>
 
       {r.fotos.length > 0 ? (
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <div className="mt-2.5 flex flex-wrap gap-2">
           {r.fotos.map((f) => (
-            <a key={f.url} href={f.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+            <a key={f.url} href={f.url} target="_blank" rel="noopener noreferrer" className="block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={f.url}
                 alt={`Foto ${f.legenda}`}
                 loading="lazy"
-                style={{ width: 84, height: 84, objectFit: "cover", borderRadius: 8, border: "1px solid #DBE0EA", display: "block" }}
+                className="block h-[84px] w-[84px] rounded-lg object-cover ring-1 ring-slate-200 transition hover:ring-brand-400"
               />
-              <span style={{ display: "block", fontSize: 10.5, color: "#8591A5", textAlign: "center", marginTop: 3 }}>{f.legenda}</span>
+              <span className="mt-1 block text-center text-[10.5px] text-slate-400">{f.legenda}</span>
             </a>
           ))}
         </div>
       ) : (
-        <div style={{ fontSize: 11.5, color: "#A9B2C1", marginTop: 8 }}>sem foto</div>
+        <div className="mt-2 text-[11.5px] text-slate-400">sem foto</div>
       )}
-    </div>
+    </Cartao>
   );
 }

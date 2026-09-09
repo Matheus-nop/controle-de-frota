@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AlertTriangle, ArrowRight, Inbox, ParkingCircle, ShieldAlert, Wrench, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  Aviso,
+  Badge,
+  BotaoLink,
+  Cartao,
+  Carregando,
+  Pagina,
+  Placa,
+  cx,
+} from "@/components/ui";
 
 // A fila do gestor. Tudo vem pronto da view v_alertas_ativos — nada e
 // recalculado aqui. Cada alerta carrega o botao que resolve o problema.
@@ -18,16 +29,17 @@ type Alerta = {
   desde: string | null;
 };
 
-const CORES: Record<string, string> = {
-  "CRÍTICO": "#C0392B",
-  "ATENÇÃO": "#C08306",
+/** Faixa lateral e etiqueta seguem os tons do kit. */
+const GRAVIDADE = {
+  "CRÍTICO": { faixa: "border-l-red-600", tom: "critico" as const },
+  "ATENÇÃO": { faixa: "border-l-amber-500", tom: "atencao" as const },
 };
 
-const EMOJI: Record<string, string> = {
-  "REVISÃO": "🔧",
-  ROTEIRO: "📥",
-  PARADO: "🅿️",
-  "OCORRÊNCIA": "⚠️",
+const ICONE: Record<string, LucideIcon> = {
+  "REVISÃO": Wrench,
+  ROTEIRO: Inbox,
+  PARADO: ParkingCircle,
+  "OCORRÊNCIA": ShieldAlert,
 };
 
 // Para onde o gestor vai para resolver cada tipo de alerta.
@@ -74,87 +86,88 @@ export default function AlertasPage() {
   const criticos = alertas.filter((a) => a.gravidade === "CRÍTICO").length;
 
   return (
-    <main style={{ minHeight: "100vh", background: "#EBEEF4", padding: 20 }}>
-      <div style={{ maxWidth: 780, margin: "0 auto" }}>
-        <a href="/" style={{ fontSize: 13, color: "#2B4C8C", textDecoration: "none" }}>← Voltar ao painel</a>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "10px 0 16px", flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Alertas</h1>
-          <span style={{ fontSize: 13, color: "#53607A" }}>
-            {alertas.length === 0
-              ? "nada pendente"
-              : `${alertas.length} no total${criticos > 0 ? ` · ${criticos} crítico${criticos > 1 ? "s" : ""}` : ""}`}
-          </span>
-        </div>
-
-        {tipos.length > 2 && (
-          <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+    <Pagina
+      estreita
+      titulo="Alertas"
+      subtitulo={
+        carregando
+          ? "carregando…"
+          : alertas.length === 0
+            ? "nada pendente"
+            : `${alertas.length} no total${criticos > 0 ? ` · ${criticos} crítico(s)` : ""}`
+      }
+      acoes={
+        tipos.length > 2 && (
+          <div className="flex flex-wrap gap-1.5">
             {tipos.map((f) => (
               <button
                 key={f}
                 onClick={() => setTipo(f)}
-                style={{
-                  padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                  border: tipo === f ? "1px solid #2B4C8C" : "1px solid #DBE0EA",
-                  background: tipo === f ? "#2B4C8C" : "#fff",
-                  color: tipo === f ? "#fff" : "#53607A",
-                }}
+                className={cx(
+                  "rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition",
+                  tipo === f
+                    ? "bg-brand-700 text-white ring-brand-700"
+                    : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50",
+                )}
               >
                 {f === "TODOS" ? "Tudo" : f.charAt(0) + f.slice(1).toLowerCase()}
               </button>
             ))}
           </div>
-        )}
-
-        {carregando ? (
-          <p style={{ color: "#53607A", fontSize: 14 }}>Carregando…</p>
-        ) : erro ? (
-          <div style={{ background: "#FBEAE7", color: "#A5301F", borderRadius: 10, padding: 16, fontSize: 13.5 }}>
-            Não consegui ler os alertas: {erro}
-            <div style={{ marginTop: 8, color: "#8A5A00" }}>
-              Se a mensagem fala em <code>v_alertas_ativos</code>, a migration
-              <code> 0007_alertas_ativos.sql</code> ainda não foi aplicada no Supabase.
-            </div>
-          </div>
-        ) : lista.length === 0 ? (
-          <div style={{ background: "#E7F3EE", color: "#1B7A4B", borderRadius: 12, padding: 20, fontSize: 14 }}>
-            Nenhum alerta. Revisões em dia, nenhum roteiro em aberto de dias anteriores,
-            nenhum veículo esquecido e nenhuma ocorrência grave sem tratamento.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {lista.map((a, i) => {
-              const cor = CORES[a.gravidade] || "#8591A5";
-              const act = acao(a);
-              const quando = dataBR(a.desde);
-              return (
-                <div
-                  key={`${a.tipo}-${a.veiculo_id}-${i}`}
-                  style={{ background: "#fff", border: "1px solid #DBE0EA", borderLeft: `5px solid ${cor}`, borderRadius: 12, padding: 16, boxShadow: "0 1px 2px rgba(22,35,60,.05)" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 15 }}>{EMOJI[a.tipo] ?? "•"}</span>
-                    <span style={{ fontWeight: 700, fontSize: 12.5, letterSpacing: ".04em", background: "#F4F6FB", border: "1px solid #C4CCDA", borderRadius: 6, padding: "2px 8px" }}>{a.placa}</span>
-                    <span style={{ fontSize: 13, color: "#53607A" }}>{a.modelo}</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", color: cor, background: cor + "18", borderRadius: 5, padding: "2px 8px" }}>{a.gravidade}</span>
-                    {quando && <span style={{ marginLeft: "auto", fontSize: 12, color: "#8591A5" }}>desde {quando}</span>}
-                  </div>
-
-                  <div style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 3px", color: "#16233C" }}>{a.titulo}</div>
-                  <div style={{ fontSize: 12.5, color: "#53607A" }}>{a.detalhe}</div>
-
-                  <a
-                    href={act.href}
-                    style={{ display: "inline-block", marginTop: 12, border: "1px solid #DBE0EA", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, color: "#2B4C8C", textDecoration: "none" }}
-                  >
-                    {act.texto} →
-                  </a>
+        )
+      }
+    >
+      {carregando ? (
+        <Cartao>
+          <Carregando />
+        </Cartao>
+      ) : erro ? (
+        <Aviso>
+          <p>Não consegui ler os alertas: {erro}</p>
+          <p className="mt-2 text-[12.5px] opacity-80">
+            Se a mensagem fala em <code>v_alertas_ativos</code>, a migration{" "}
+            <code>0007_alertas_ativos.sql</code> ainda não foi aplicada no Supabase.
+          </p>
+        </Aviso>
+      ) : lista.length === 0 ? (
+        <Aviso tom="ok">
+          Nenhum alerta. Revisões em dia, nenhum roteiro em aberto de dias anteriores, nenhum veículo
+          esquecido e nenhuma ocorrência grave sem tratamento.
+        </Aviso>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {lista.map((a, i) => {
+            const g = GRAVIDADE[a.gravidade as keyof typeof GRAVIDADE];
+            const Icone = ICONE[a.tipo] ?? AlertTriangle;
+            const act = acao(a);
+            const quando = dataBR(a.desde);
+            return (
+              <Cartao
+                key={`${a.tipo}-${a.veiculo_id}-${i}`}
+                className={cx("border-l-4 p-4", g?.faixa ?? "border-l-slate-300")}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Icone size={16} className="shrink-0 text-slate-400" />
+                  <Placa>{a.placa}</Placa>
+                  <span className="text-[13px] text-slate-500">{a.modelo}</span>
+                  <Badge tom={g?.tom ?? "mudo"}>{a.gravidade}</Badge>
+                  {quando && (
+                    <span className="ml-auto text-[12px] text-slate-400">desde {quando}</span>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </main>
+
+                <div className="mb-1 mt-2.5 text-sm font-semibold text-slate-900">{a.titulo}</div>
+                <div className="text-[12.5px] text-slate-500">{a.detalhe}</div>
+
+                <BotaoLink href={act.href} tamanho="sm" className="mt-3">
+                  {act.texto}
+                  <ArrowRight size={13} />
+                </BotaoLink>
+              </Cartao>
+            );
+          })}
+        </div>
+      )}
+    </Pagina>
   );
 }

@@ -1,8 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Wrench } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/frota/tempo";
+import {
+  Badge,
+  Botao,
+  BotaoLink,
+  Campo,
+  Cartao,
+  Carregando,
+  Checkbox,
+  Input,
+  Pagina,
+  Placa,
+  Select,
+  Vazio,
+  cx,
+  type Tom,
+} from "@/components/ui";
 
 type Ocorrencia = {
   id: string;
@@ -25,17 +42,22 @@ type Ocorrencia = {
 
 const STATUS = ["ABERTA", "EM ANÁLISE", "RESOLVIDA", "CANCELADA"];
 
-const CORES: Record<string, string> = {
-  ABERTA: "#C0392B",
-  "EM ANÁLISE": "#C08306",
-  RESOLVIDA: "#1B9E6B",
-  CANCELADA: "#8591A5",
+const TOM_STATUS: Record<string, Tom> = {
+  ABERTA: "critico",
+  "EM ANÁLISE": "atencao",
+  RESOLVIDA: "ok",
+  CANCELADA: "mudo",
 };
-
-const CORES_GRAVIDADE: Record<string, string> = {
-  LEVE: "#1B9E6B",
-  MODERADA: "#C08306",
-  GRAVE: "#C0392B",
+const FAIXA_STATUS: Record<string, string> = {
+  ABERTA: "border-l-red-600",
+  "EM ANÁLISE": "border-l-amber-500",
+  RESOLVIDA: "border-l-emerald-600",
+  CANCELADA: "border-l-slate-300",
+};
+const TOM_GRAVIDADE: Record<string, Tom> = {
+  LEVE: "ok",
+  MODERADA: "atencao",
+  GRAVE: "critico",
 };
 
 // Gravidade da ocorrencia vira prioridade da manutencao.
@@ -52,18 +74,19 @@ function dataBR(s: string | null) {
   return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : "—";
 }
 
-const input: React.CSSProperties = {
-  width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #CBD5E1",
-  fontSize: 14, boxSizing: "border-box", background: "#fff",
-};
-const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#53607A", marginBottom: 4, display: "block" };
+const FILTROS: [string, string][] = [
+  ["ABERTAS", "Em aberto"],
+  ["RESOLVIDA", "Resolvidas"],
+  ["CANCELADA", "Canceladas"],
+  ["TODAS", "Todas"],
+];
 
 export default function OcorrenciasPage() {
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtro, setFiltro] = useState("ABERTAS");
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.getUser();
     const { data } = await supabase
@@ -73,62 +96,70 @@ export default function OcorrenciasPage() {
       .order("registrada_em", { ascending: false });
     setOcorrencias((data as Ocorrencia[]) ?? []);
     setCarregando(false);
-  }
-
-  useEffect(() => {
-    carregar();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      await carregar();
+    })();
+  }, [carregar]);
+
   const lista = ocorrencias.filter((o) =>
-    filtro === "TODAS" ? true : filtro === "ABERTAS" ? o.status === "ABERTA" || o.status === "EM ANÁLISE" : o.status === filtro,
+    filtro === "TODAS"
+      ? true
+      : filtro === "ABERTAS"
+        ? o.status === "ABERTA" || o.status === "EM ANÁLISE"
+        : o.status === filtro,
   );
   const abertas = ocorrencias.filter((o) => o.status === "ABERTA" || o.status === "EM ANÁLISE").length;
-  const graves = ocorrencias.filter((o) => o.gravidade === "GRAVE" && (o.status === "ABERTA" || o.status === "EM ANÁLISE")).length;
+  const graves = ocorrencias.filter(
+    (o) => o.gravidade === "GRAVE" && (o.status === "ABERTA" || o.status === "EM ANÁLISE"),
+  ).length;
 
   return (
-    <main style={{ minHeight: "100vh", background: "#EBEEF4", padding: 20 }}>
-      <div style={{ maxWidth: 780, margin: "0 auto" }}>
-        <a href="/" style={{ fontSize: 13, color: "#2B4C8C", textDecoration: "none" }}>← Voltar ao painel</a>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "10px 0 16px", flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Ocorrências</h1>
-          <span style={{ fontSize: 13, color: "#53607A" }}>
-            {abertas} em aberto{graves > 0 ? ` · ${graves} grave${graves > 1 ? "s" : ""}` : ""}
-          </span>
-        </div>
-
-        <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-          {["ABERTAS", "RESOLVIDA", "CANCELADA", "TODAS"].map((f) => (
+    <Pagina
+      estreita
+      titulo="Ocorrências"
+      subtitulo={
+        carregando ? "carregando…" : `${abertas} em aberto${graves > 0 ? ` · ${graves} grave(s)` : ""}`
+      }
+      acoes={
+        <div className="flex flex-wrap gap-1.5">
+          {FILTROS.map(([valor, rotulo]) => (
             <button
-              key={f}
-              onClick={() => setFiltro(f)}
-              style={{
-                padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                border: filtro === f ? "1px solid #2B4C8C" : "1px solid #DBE0EA",
-                background: filtro === f ? "#2B4C8C" : "#fff",
-                color: filtro === f ? "#fff" : "#53607A",
-              }}
+              key={valor}
+              onClick={() => setFiltro(valor)}
+              className={cx(
+                "rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition",
+                filtro === valor
+                  ? "bg-brand-700 text-white ring-brand-700"
+                  : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50",
+              )}
             >
-              {f === "ABERTAS" ? "Em aberto" : f === "TODAS" ? "Todas" : f.charAt(0) + f.slice(1).toLowerCase()}
+              {rotulo}
             </button>
           ))}
         </div>
-
-        {carregando ? (
-          <p style={{ color: "#53607A", fontSize: 14 }}>Carregando…</p>
-        ) : lista.length === 0 ? (
-          <p style={{ color: "#8591A5", fontSize: 14 }}>Nenhuma ocorrência nesse filtro.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {lista.map((o) => <OcorrenciaCard key={o.id} o={o} onSalvo={carregar} />)}
-          </div>
-        )}
-      </div>
-    </main>
+      }
+    >
+      {carregando ? (
+        <Cartao>
+          <Carregando />
+        </Cartao>
+      ) : lista.length === 0 ? (
+        <Vazio titulo="Nenhuma ocorrência nesse filtro." />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {lista.map((o) => (
+            <CartaoOcorrencia key={o.id} o={o} onSalvo={carregar} />
+          ))}
+        </div>
+      )}
+    </Pagina>
   );
 }
 
-function OcorrenciaCard({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) {
+function CartaoOcorrencia({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) {
   const v = one(o.veiculo);
   const t = one(o.tecnico);
   const [aberto, setAberto] = useState(false);
@@ -138,8 +169,6 @@ function OcorrenciaCard({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) 
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; txt: string } | null>(null);
 
-  const cor = CORES[o.status] || "#8591A5";
-  const corGrav = CORES_GRAVIDADE[o.gravidade] || "#8591A5";
   const fotos = Array.isArray(o.fotos) ? o.fotos : [];
 
   async function salvar() {
@@ -157,7 +186,7 @@ function OcorrenciaCard({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) 
         })
         .eq("id", o.id);
       if (error) throw error;
-      setMsg({ ok: true, txt: "Salvo!" });
+      setMsg({ ok: true, txt: "Salvo." });
       onSalvo();
     } catch (err) {
       setMsg({ ok: false, txt: err instanceof Error ? err.message : "Erro ao salvar." });
@@ -198,7 +227,7 @@ function OcorrenciaCard({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) 
       }
 
       setStatus("EM ANÁLISE");
-      setMsg({ ok: true, txt: "Manutenção aberta!" });
+      setMsg({ ok: true, txt: "Manutenção aberta." });
       onSalvo();
     } catch (err) {
       setMsg({ ok: false, txt: err instanceof Error ? err.message : "Erro ao abrir a manutenção." });
@@ -208,17 +237,17 @@ function OcorrenciaCard({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) 
   }
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #DBE0EA", borderLeft: `5px solid ${cor}`, borderRadius: 12, padding: 16, boxShadow: "0 1px 2px rgba(22,35,60,.05)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 700, fontSize: 12.5, letterSpacing: ".04em", background: "#F4F6FB", border: "1px solid #C4CCDA", borderRadius: 6, padding: "2px 8px" }}>{v?.placa}</span>
-        <span style={{ fontSize: 13, color: "#53607A" }}>{v?.modelo}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", color: cor, background: cor + "18", borderRadius: 5, padding: "2px 8px" }}>{o.status}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", color: corGrav, background: corGrav + "18", borderRadius: 5, padding: "2px 8px" }}>{o.gravidade}</span>
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8591A5" }}>{o.tipo}</span>
+    <Cartao className={cx("border-l-4 p-4", FAIXA_STATUS[o.status] ?? "border-l-slate-300")}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Placa>{v?.placa}</Placa>
+        <span className="text-[13px] text-slate-500">{v?.modelo}</span>
+        <Badge tom={TOM_STATUS[o.status] ?? "mudo"}>{o.status}</Badge>
+        <Badge tom={TOM_GRAVIDADE[o.gravidade] ?? "mudo"}>{o.gravidade}</Badge>
+        <span className="ml-auto text-[12px] text-slate-400">{o.tipo}</span>
       </div>
 
-      <div style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 4px" }}>{o.descricao}</div>
-      <div style={{ fontSize: 12, color: "#53607A" }}>
+      <div className="mb-1 mt-2.5 text-sm font-semibold text-slate-900">{o.descricao}</div>
+      <div className="text-[12px] text-slate-500">
         {dataBR(o.data)} · relatado por {t?.nome ?? "—"}
         {o.local ? " · " + o.local : ""}
         {o.terceiros ? " · envolveu terceiros" : ""}
@@ -226,73 +255,83 @@ function OcorrenciaCard({ o, onSalvo }: { o: Ocorrencia; onSalvo: () => void }) 
       </div>
 
       {o.resolucao && (
-        <div style={{ fontSize: 12.5, color: "#1B7A4B", marginTop: 6 }}>Resolução: {o.resolucao}</div>
+        <div className="mt-1.5 text-[12.5px] text-emerald-700">Resolução: {o.resolucao}</div>
       )}
 
       {fotos.length > 0 && (
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <div className="mt-2.5 flex flex-wrap gap-2">
           {fotos.map((url, i) => (
             <a key={url} href={url} target="_blank" rel="noopener noreferrer">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={url}
                 alt={`Foto ${i + 1} da ocorrência`}
-                style={{ width: 76, height: 76, objectFit: "cover", borderRadius: 8, border: "1px solid #DBE0EA", display: "block" }}
+                className="block h-[76px] w-[76px] rounded-lg object-cover ring-1 ring-slate-200 transition hover:ring-brand-400"
               />
             </a>
           ))}
         </div>
       )}
 
-      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={() => setAberto((x) => !x)} style={{ background: "none", border: "1px solid #DBE0EA", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, color: "#2B4C8C", cursor: "pointer" }}>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Botao tamanho="sm" onClick={() => setAberto((x) => !x)}>
           {aberto ? "Fechar" : "Tratar ocorrência"}
-        </button>
+        </Botao>
         {o.manutencao_id && (
-          <a href="/manutencao" style={{ border: "1px solid #DBE0EA", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 600, color: "#1B7A4B", textDecoration: "none" }}>
-            🔧 Manutenção aberta — ver
-          </a>
+          <BotaoLink href="/manutencao" tamanho="sm" className="text-emerald-700">
+            <Wrench size={13} />
+            Manutenção aberta — ver
+          </BotaoLink>
         )}
       </div>
 
       {aberto && (
-        <div style={{ marginTop: 14, borderTop: "1px solid #EBEEF4", paddingTop: 14 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <div style={{ flex: "1 1 160px", minWidth: 140 }}>
-              <label style={lbl}>Status</label>
-              <select style={input} value={status} onChange={(e) => setStatus(e.target.value)}>
-                {STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: "2 1 260px", minWidth: 180 }}>
-              <label style={lbl}>Resolução / providência</label>
-              <input style={input} value={resolucao} onChange={(e) => setResolucao(e.target.value)} placeholder="o que foi feito" />
-            </div>
+        <div className="mt-3.5 border-t border-slate-100 pt-3.5">
+          <div className="flex flex-wrap gap-2.5">
+            <Campo rotulo="Status" className="min-w-[140px] flex-[1_1_160px]">
+              <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                {STATUS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
+            </Campo>
+            <Campo rotulo="Resolução / providência" className="min-w-[180px] flex-[2_1_260px]">
+              <Input
+                value={resolucao}
+                onChange={(e) => setResolucao(e.target.value)}
+                placeholder="o que foi feito"
+              />
+            </Campo>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
-            <button onClick={salvar} disabled={salvando} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: salvando ? "#7CA0C9" : "#2B4C8C", color: "#fff", fontSize: 13.5, fontWeight: 600, cursor: salvando ? "default" : "pointer" }}>
+          <div className="mt-3.5 flex flex-wrap items-center gap-3">
+            <Botao variante="primario" onClick={salvar} disabled={salvando}>
               {salvando ? "Salvando…" : "Salvar"}
-            </button>
-            {msg && <span style={{ fontSize: 13, color: msg.ok ? "#1B7A4B" : "#C0392B" }}>{msg.txt}</span>}
+            </Botao>
+            {msg && (
+              <span className={cx("text-[13px]", msg.ok ? "text-emerald-700" : "text-red-700")}>
+                {msg.txt}
+              </span>
+            )}
           </div>
 
           {!o.manutencao_id && (
-            <div style={{ marginTop: 16, borderTop: "1px dashed #DBE0EA", paddingTop: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#16233C", marginBottom: 8 }}>
-                Precisa de conserto?
-              </div>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#53607A", marginBottom: 10 }}>
-                <input type="checkbox" checked={bloquear} onChange={(e) => setBloquear(e.target.checked)} />
+            <div className="mt-4 border-t border-dashed border-slate-200 pt-3.5">
+              <div className="mb-2 text-[13px] font-semibold text-slate-900">Precisa de conserto?</div>
+              <label className="mb-2.5 flex items-center gap-2 text-[13px] text-slate-600">
+                <Checkbox checked={bloquear} onChange={(e) => setBloquear(e.target.checked)} />
                 Colocar o veículo em manutenção (sai da operação)
               </label>
-              <button onClick={virarManutencao} disabled={salvando} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: salvando ? "#7CA0C9" : "#1B9E6B", color: "#fff", fontSize: 13.5, fontWeight: 600, cursor: salvando ? "default" : "pointer" }}>
+              <Botao variante="sucesso" onClick={virarManutencao} disabled={salvando}>
+                <Wrench size={14} />
                 {salvando ? "Abrindo…" : "Abrir manutenção desta ocorrência"}
-              </button>
+              </Botao>
             </div>
           )}
         </div>
       )}
-    </div>
+    </Cartao>
   );
 }
