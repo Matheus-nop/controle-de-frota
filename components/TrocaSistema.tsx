@@ -4,36 +4,50 @@ import { Boxes, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Passar para os outros sistemas do grupo sem procurar o endereço.
+ * Passar de um sistema do grupo para o outro sem procurar o endereço.
  *
- * Espelha a caixinha "Sistemas" do Roteiros e do Estoque: os três topos ficam
- * iguais, e quem alterna o dia inteiro não precisa procurar em lugar diferente
- * em cada app.
+ * A mesma caixinha existe nos três apps, com a mesma lista e na mesma ordem —
+ * quem alterna o dia inteiro não pode ter que procurar em lugar diferente em
+ * cada um.
  *
- * Os endereços vêm de `NEXT_PUBLIC_URL_ROTEIROS` e `NEXT_PUBLIC_URL_ESTOQUE`.
- * Sem variável o item some, em vez de levar alguém para um endereço que não
- * abre. Sem nenhuma das duas, a caixinha inteira some.
+ * O endereço de cada sistema vem de variável (`NEXT_PUBLIC_URL_ROTEIROS`,
+ * `NEXT_PUBLIC_URL_ESTOQUE`). Sem a variável o item some, em vez de levar
+ * alguém para um endereço que não abre — é o que vale em desenvolvimento. Sem
+ * nenhum destino, a caixinha inteira some.
  *
- * O login é o mesmo nos três (o `auth.users` é um só), mas a sessão ainda não:
- * hoje se entra uma vez de cada lado.
+ * Sobre a sessão, para não prometer o que não existe: roteiros e estoque
+ * dividem o mesmo `auth.users`, mas a frota ainda mora num projeto Supabase
+ * próprio. Hoje trocar de sistema pede login de novo. Unificar isso é a
+ * mudança da frota para o projeto compartilhado, que é outro trabalho.
  */
-const DESTINOS = [
+
+const AQUI = "frota";
+
+const SISTEMAS = [
   {
-    url: process.env.NEXT_PUBLIC_URL_ROTEIROS,
+    id: "roteiros",
     nome: "Roteiros",
     descricao: "Planejamento e rota dos técnicos",
+    url: process.env.NEXT_PUBLIC_URL_ROTEIROS,
   },
   {
-    url: process.env.NEXT_PUBLIC_URL_ESTOQUE,
+    id: "estoque",
     nome: "Estoque",
     descricao: "Equipamentos, expedição e galpões",
+    url: process.env.NEXT_PUBLIC_URL_ESTOQUE,
+  },
+  {
+    id: "frota",
+    nome: "Frota",
+    descricao: "Veículos, checklist e manutenção",
+    url: undefined,
   },
 ];
 
 export function TrocaSistema() {
   const [aberto, setAberto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const destinos = DESTINOS.filter((d) => d.url);
+  const sistemas = SISTEMAS.filter((s) => s.id === AQUI || s.url);
 
   useEffect(() => {
     if (!aberto) return;
@@ -51,7 +65,8 @@ export function TrocaSistema() {
     };
   }, [aberto]);
 
-  if (destinos.length === 0) return null;
+  // Só a frota na lista é uma caixinha que não leva a lugar nenhum.
+  if (sistemas.length < 2) return null;
 
   return (
     <div className="relative shrink-0" ref={ref}>
@@ -71,23 +86,35 @@ export function TrocaSistema() {
           role="menu"
           className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl bg-white text-slate-800 shadow-xl ring-1 ring-slate-200"
         >
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              Frota <span className="text-[10px] font-medium text-slate-400">você está aqui</span>
-            </div>
-            <div className="mt-0.5 text-xs text-slate-500">Veículos, roteiros e manutenção</div>
-          </div>
-          {destinos.map((d) => (
-            <a
-              key={d.nome}
-              href={d.url}
-              role="menuitem"
-              className="block px-4 py-3 transition-colors hover:bg-slate-50"
-            >
-              <div className="text-sm font-semibold">{d.nome}</div>
-              <div className="mt-0.5 text-xs text-slate-500">{d.descricao}</div>
-            </a>
-          ))}
+          {sistemas.map((s) => {
+            const aqui = s.id === AQUI;
+            const conteudo = (
+              <>
+                <span className="flex items-center gap-2 text-sm font-semibold">
+                  {s.nome}
+                  {aqui && <span className="text-[10px] font-medium text-slate-400">você está aqui</span>}
+                </span>
+                <span className="mt-0.5 block text-xs text-slate-500">{s.descricao}</span>
+              </>
+            );
+            return aqui ? (
+              <div
+                key={s.id}
+                className="border-b border-slate-100 bg-slate-50 px-4 py-3 last:border-b-0"
+              >
+                {conteudo}
+              </div>
+            ) : (
+              <a
+                key={s.id}
+                href={s.url}
+                role="menuitem"
+                className="block border-b border-slate-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-slate-50"
+              >
+                {conteudo}
+              </a>
+            );
+          })}
         </div>
       )}
     </div>
