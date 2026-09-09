@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Carrega os dados do painel a partir do Supabase e os mapeia para o formato
-// que components/painel/PainelFrota.jsx espera (o antigo shape da constante DADOS).
+// que components/painel/PainelFrota.tsx espera (o antigo shape da constante DADOS).
 //
 // Fonte de verdade: as views v_roteiros e v_custo_veiculo (numeros derivados
 // prontos, sem recalculo no front) mais as tabelas veiculos, manutencoes e

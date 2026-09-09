@@ -42,6 +42,9 @@ na Vercel. Login por usuário/senha. Painel do gestor e app de campo funcionando
 | `/login` | Login por usuário + senha | público |
 | `/api/health` | Health-check do Supabase | público |
 
+Todas as rotas de uso diário moram em `app/(app)/`, que aplica a casca comum.
+`/login` e `/manutencao/ordem` ficam fora dela.
+
 ### Automações ativas (triggers no banco)
 - `trg_km_roteiro` / `trg_km_checklist` — atualizam `veiculos.km_atual` sozinhos.
 - `trg_bloqueio_checklist` — checklist "não apto" bloqueia o veículo; "apto" libera.
@@ -308,7 +311,7 @@ responde "como está agora" e carrega a frota sem recorte de data; relatório
 responde "o que aconteceu entre tal e tal dia", e sem período todo número vira
 o acumulado de sempre, que não fecha mês.
 
-As contas ficam em `app/relatorios/dados.ts`, fora do JSX — é a parte que
+As contas ficam em `app/(app)/relatorios/dados.ts`, fora do JSX — é a parte que
 precisa estar certa. Duas convenções que valem para todas elas:
 - o **custo do roteiro** vem pronto de `v_roteiros` (`custo_roteiro`), nunca
   recalculado no front: duas fontes para o mesmo número é o erro da planilha;
@@ -321,6 +324,40 @@ registro de abastecimento, que continua na lista de ideias.
 
 `/relatorios` é só do GESTOR: a RLS de `ocorrencias` não abre para PCM, que
 veria a aba vazia e leria isso como "não houve ocorrência".
+
+### Aparência (feito)
+O app tinha um desenho por tela: estilo em linha na maioria, três blocos de CSS
+injetado (painel, ponto, relatórios) com cópias dos mesmos tokens, e nenhuma
+barra superior ou navegação — cada página se resolvia sozinha e cada uma tinha
+o seu botão azul.
+
+Agora o design system é **o mesmo do app de Roteiros**, porque é a mesma equipe
+alternando entre os dois no mesmo dia:
+
+- `app/globals.css` — o `@theme` da marca (`brand-*` do azul do logotipo,
+  `acento-*` do âmbar da engrenagem, `acao-*` da ação primária) e os utilitários
+  `.campo`, `.rotulo`, `.tabela`, `.toque`, `.placa`. Espelha
+  `roteiros/src/index.css`.
+- `components/ui.tsx` — o kit: Botao, BotaoLink, Cartao, Pagina, Contador,
+  Modal, Confirmar, Badge, Campo, Input, Select, Textarea, Vazio, Aviso, Placa.
+- `components/Logo.tsx` — logomarca do grupo, o símbolo do sistema (o veículo
+  sobre a estrada) e o lockup da barra superior.
+- `components/Casca.tsx` — barra superior com o gradiente da marca, abas por
+  papel no desktop, gaveta no celular, menu do usuário e a caixinha "Sistemas",
+  que alcança Roteiros e Estoque.
+- Ícones: `lucide-react`, no lugar dos emojis — emoji muda de desenho conforme
+  o aparelho, e era a única pista do tipo no cartão de alerta.
+
+**Route group `app/(app)/`.** É ele que aplica a casca. O endereço das telas não
+mudou (`(app)` não entra na URL). Ficam de fora, de propósito, `/login` e
+`/manutencao/ordem` — a ordem de serviço é uma folha A4 que vai para a oficina.
+
+**Duas variáveis novas**, opcionais: `NEXT_PUBLIC_URL_ROTEIROS` e
+`NEXT_PUBLIC_URL_ESTOQUE`. Vazias, o item some da caixinha "Sistemas"; vazias as
+duas, a caixinha inteira some. No Vercel: Settings → Environment Variables.
+
+Regra que passa a valer: **nada de estilo em linha nem de `<style>` por tela.**
+Peça nova é peça no kit.
 
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
