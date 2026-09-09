@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { paraDecimal, paraInteiro } from "@/lib/frota/numero";
 import {
   Aviso,
   Badge,
   Botao,
   Campo,
+  CampoNumero,
   Cartao,
   Carregando,
   Input,
@@ -42,14 +44,6 @@ const TOM_STATUS: Record<string, Tom> = {
   VENDIDO: "mudo",
 };
 
-function intOrNull(s: string): number | null {
-  const n = parseInt(s, 10);
-  return Number.isNaN(n) ? null : n;
-}
-function numOrNull(s: string): number | null {
-  const n = parseFloat((s || "").replace(",", "."));
-  return Number.isNaN(n) ? null : n;
-}
 // A placa é sempre normalizada: maiúscula, sem espaço nem hífen (SRT9D55).
 function normPlaca(p: string): string {
   return p.toUpperCase().replace(/[\s-]/g, "");
@@ -158,10 +152,10 @@ function LinhaVeiculo({ v, tecnicos }: { v: Veiculo; tecnicos: Tecnico[] }) {
         modelo: modelo.trim(),
         ano: ano.trim() || null,
         responsavel_id: resp || null,
-        km_atual: intOrNull(km),
-        proxima_revisao_km: intOrNull(rev),
-        consumo_km_l: numOrNull(cons),
-        valor_combustivel: numOrNull(comb),
+        km_atual: paraInteiro(km),
+        proxima_revisao_km: paraInteiro(rev),
+        consumo_km_l: paraDecimal(cons),
+        valor_combustivel: paraDecimal(comb),
         status,
       })
       .eq("id", v.id);
@@ -206,33 +200,16 @@ function LinhaVeiculo({ v, tecnicos }: { v: Veiculo; tecnicos: Tecnico[] }) {
               ))}
             </Select>
           </Campo>
-          <Campo
+          <CampoNumero
             rotulo="Km atual"
+            unidade="km"
+            valor={km}
+            onValor={setKm}
             dica="A saída e o checklist já atualizam este número sozinhos."
-          >
-            <Input type="number" inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
-          </Campo>
-          <Campo rotulo="Próx. revisão (km)">
-            <Input type="number" inputMode="numeric" value={rev} onChange={(e) => setRev(e.target.value)} />
-          </Campo>
-          <Campo rotulo="Consumo (km/l)">
-            <Input
-              type="number"
-              step="0.1"
-              inputMode="decimal"
-              value={cons}
-              onChange={(e) => setCons(e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Preço do combustível">
-            <Input
-              type="number"
-              step="0.01"
-              inputMode="decimal"
-              value={comb}
-              onChange={(e) => setComb(e.target.value)}
-            />
-          </Campo>
+          />
+          <CampoNumero rotulo="Próx. revisão (km)" unidade="km" valor={rev} onValor={setRev} />
+          <CampoNumero rotulo="Consumo (km/l)" unidade="km/l" valor={cons} onValor={setCons} />
+          <CampoNumero rotulo="Preço do combustível" unidade="reais" valor={comb} onValor={setComb} />
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -276,10 +253,10 @@ function NovoVeiculo({ tecnicos, onCriado }: { tecnicos: Tecnico[]; onCriado: ()
       modelo: modelo.trim(),
       ano: ano.trim() || null,
       responsavel_id: resp || null,
-      km_atual: intOrNull(km),
-      proxima_revisao_km: intOrNull(rev),
-      consumo_km_l: numOrNull(cons),
-      valor_combustivel: numOrNull(comb),
+      km_atual: paraInteiro(km),
+      proxima_revisao_km: paraInteiro(rev),
+      consumo_km_l: paraDecimal(cons),
+      valor_combustivel: paraDecimal(comb),
       status: "ATIVO",
     });
     if (error) {
@@ -313,18 +290,10 @@ function NovoVeiculo({ tecnicos, onCriado }: { tecnicos: Tecnico[]; onCriado: ()
               ))}
             </Select>
           </Campo>
-          <Campo rotulo="Km atual">
-            <Input type="number" value={km} onChange={(e) => setKm(e.target.value)} />
-          </Campo>
-          <Campo rotulo="Próx. revisão (km)">
-            <Input type="number" value={rev} onChange={(e) => setRev(e.target.value)} />
-          </Campo>
-          <Campo rotulo="Consumo (km/l)">
-            <Input type="number" step="0.1" value={cons} onChange={(e) => setCons(e.target.value)} />
-          </Campo>
-          <Campo rotulo="Preço do combustível">
-            <Input type="number" step="0.01" value={comb} onChange={(e) => setComb(e.target.value)} />
-          </Campo>
+          <CampoNumero rotulo="Km atual" unidade="km" valor={km} onValor={setKm} />
+          <CampoNumero rotulo="Próx. revisão (km)" unidade="km" valor={rev} onValor={setRev} />
+          <CampoNumero rotulo="Consumo (km/l)" unidade="km/l" valor={cons} onValor={setCons} />
+          <CampoNumero rotulo="Preço do combustível" unidade="reais" valor={comb} onValor={setComb} />
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3">

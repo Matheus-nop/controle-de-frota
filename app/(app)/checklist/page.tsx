@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { paraInteiro } from "@/lib/frota/numero";
 import { hojeBR } from "@/lib/frota/tempo";
 import { enviarFotos } from "@/lib/frota/foto";
 import {
@@ -10,6 +11,7 @@ import {
   Botao,
   BotaoLink,
   Campo,
+  CampoNumero,
   Cartao,
   Carregando,
   Input,
@@ -135,6 +137,14 @@ export default function ChecklistPage() {
       setErro("Preencha condutor, veículo, km e se o veículo está apto.");
       return;
     }
+    // O campo é de texto (para entender `66.402`), então "preenchido" não
+    // quer mais dizer "numérico" — quem confere isso agora somos nós, e não
+    // o `type=number` do navegador.
+    const kmNum = paraInteiro(km);
+    if (kmNum == null) {
+      setErro("O km atual precisa ser um número. Confira o hodômetro.");
+      return;
+    }
     if (!fotosSemanais || fotosSemanais.length === 0) {
       setErro("As fotos semanais (frente, traseira e laterais) são obrigatórias.");
       return;
@@ -169,7 +179,7 @@ export default function ChecklistPage() {
         veiculo_id: veiculoId,
         tecnico_id: condutorId,
         data: data || hojeBR(),
-        km_atual: parseInt(km, 10),
+        km_atual: kmNum,
         itens,
         apto: apto === "SIM",
         motivo_bloqueio: apto === "NÃO" ? motivo : null,
@@ -255,16 +265,14 @@ export default function ChecklistPage() {
                 </Select>
               </Campo>
 
-              <Campo rotulo="Km atual">
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  required
-                  value={km}
-                  onChange={(e) => setKm(e.target.value)}
-                  placeholder="ex.: 66402"
-                />
-              </Campo>
+              <CampoNumero
+                rotulo="Km atual"
+                unidade="km"
+                required
+                valor={km}
+                onValor={setKm}
+                placeholder="ex.: 66402"
+              />
 
               <Campo rotulo="O veículo foi usado por outro condutor antes desta vistoria?">
                 <Select value={usadoOutro} onChange={(e) => setUsadoOutro(e.target.value)}>

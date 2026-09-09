@@ -359,6 +359,50 @@ duas, a caixinha inteira some. No Vercel: Settings → Environment Variables.
 Regra que passa a valer: **nada de estilo em linha nem de `<style>` por tela.**
 Peça nova é peça no kit.
 
+### Número em português (feito, 2026-09-09)
+Na primeira apresentação ao gestor, a abertura de uma manutenção com `30.000` de
+km e `3.000,00` de orçamento gravou **30 e 3**. Mil vezes menos, sem aviso, e a
+ordem de serviço saiu impressa com "R$ 3,00" para a oficina.
+
+A causa eram dois parsers ingênuos copiados por quatro telas:
+
+```
+parseInt("30.000", 10)                     -> 30   (o ponto corta o número)
+parseFloat("3.000,00".replace(",", "."))   -> 3    (o replace troca a PRIMEIRA
+                                                    vírgula: vira "3.000.00")
+```
+
+Agora a conversão mora em **`lib/frota/numero.ts`** (`paraDecimal`,
+`paraInteiro`, `emKm`, `emReais`, `emKmPorLitro`). A regra de desempate: quando
+o último separador tem exatamente três dígitos depois dele, ele é milhar, não
+decimal — `30.000` e `30,000` valem trinta mil; `3.000,00` vale três mil.
+Quilometragem corta a casa decimal em vez de arredondar, porque o hodômetro de
+quem digitou `66402,5` marca 66402, e é contra esse número que a próxima saída
+é validada.
+
+E o kit ganhou **`CampoNumero`**, que substituiu todo `<input type="number">` de
+km e dinheiro. Ele é campo de texto com `inputMode` (o teclado numérico do
+celular continua abrindo) e **mostra embaixo o número que vai ser gravado**:
+digitou `30.000`, lê-se "30.000 km" logo abaixo. É a parte que mais importa —
+`30.000` só é ambíguo até alguém ver a interpretação antes de salvar. Texto que
+não vira número avisa em vermelho, em vez de virar nulo caladamente.
+
+O `type="number"` saiu por três motivos, não um: entendia o ponto como decimal,
+mudava de valor sozinho quando a roda do mouse passava por cima, e apagava sem
+avisar o que considerava inválido.
+
+Telas alteradas: `/manutencao` (abertura e andamento), `/veiculos` (criar e
+editar), `/checklist`, `/roteiro/saida`, `/roteiro/chegada` e a ordem de serviço.
+
+**`km_abertura` passou a aparecer no painel "Registrar andamento"** de
+`/manutencao`. Antes só existia no formulário de abrir, e uma manutenção com o km
+errado só se corrigia no banco. É o número que mais chega errado — vem do
+hodômetro anotado no pátio e às vezes só é conferido depois.
+
+Pendente relacionado: o km do `/checklist` ainda não é validado contra o km
+anterior do veículo, como a saída e a chegada são. A regra do CLAUDE.md pede
+isso; ficou de fora desta correção por ser outro assunto.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
