@@ -1,8 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/frota/tempo";
+import { enviarFotos } from "@/lib/frota/foto";
+import {
+  Aviso,
+  Botao,
+  BotaoLink,
+  Campo,
+  Cartao,
+  Carregando,
+  Checkbox,
+  Input,
+  Pagina,
+  Select,
+  Textarea,
+  cx,
+} from "@/components/ui";
 
 type Veiculo = { id: string; placa: string; modelo: string; status: string };
 type Tecnico = { id: string; nome: string };
@@ -14,10 +30,11 @@ const TIPOS: [string, string][] = [
   ["OUTRO", "Outro"],
 ];
 
-const GRAVIDADES: [string, string, string][] = [
-  ["LEVE", "Leve", "#1B9E6B"],
-  ["MODERADA", "Moderada", "#C08306"],
-  ["GRAVE", "Grave", "#C0392B"],
+/** A cor da gravidade é a mesma dos tons do kit — verde, âmbar, vermelho. */
+const GRAVIDADES: [string, string, string, string][] = [
+  ["LEVE", "Leve", "ring-emerald-600 bg-emerald-50 text-emerald-700", "text-emerald-700"],
+  ["MODERADA", "Moderada", "ring-amber-500 bg-amber-50 text-amber-700", "text-amber-700"],
+  ["GRAVE", "Grave", "ring-red-600 bg-red-50 text-red-700", "text-red-700"],
 ];
 
 export default function OcorrenciaPage() {
@@ -47,7 +64,9 @@ export default function OcorrenciaPage() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       const [v, t, eu] = await Promise.all([
         supabase
@@ -98,16 +117,7 @@ export default function OcorrenciaPage() {
     setSalvando(true);
     try {
       const supabase = createClient();
-
-      const urls: string[] = [];
-      for (let i = 0; i < fotos.length; i++) {
-        const f = fotos[i];
-        const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
-        const path = `${veiculoId}/ocorrencia-${Date.now()}-${i}.${ext}`;
-        const up = await supabase.storage.from("ocorrencias").upload(path, f);
-        if (up.error) throw up.error;
-        urls.push(supabase.storage.from("ocorrencias").getPublicUrl(path).data.publicUrl);
-      }
+      const urls = await enviarFotos(supabase, "ocorrencias", `${veiculoId}/ocorrencia`, fotos);
 
       const { error } = await supabase.from("ocorrencias").insert({
         veiculo_id: veiculoId,
@@ -130,153 +140,202 @@ export default function OcorrenciaPage() {
     }
   }
 
-  const input: React.CSSProperties = {
-    width: "100%", marginTop: 6, marginBottom: 16, padding: "11px 12px",
-    borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 15, boxSizing: "border-box", background: "#fff",
-  };
-  const label: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "#101A26" };
-  const secao: React.CSSProperties = {
-    fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em",
-    color: "#C0392B", margin: "20px 0 10px", borderTop: "1px solid #E3E9F0", paddingTop: 16,
-  };
-
   if (ok) {
     return (
-      <main style={{ minHeight: "100vh", background: "#F4F6F9", padding: 20 }}>
-        <div style={{ maxWidth: 520, margin: "0 auto", background: "#fff", border: "1px solid #E3E9F0", borderRadius: 14, padding: 24 }}>
-          <div style={{ background: "#E7F3EE", color: "#1B7A4B", borderRadius: 10, padding: 16, fontSize: 14, marginBottom: 16 }}>
-            Ocorrência registrada! O gestor já consegue ver o relato e as fotos.
+      <Pagina estreita titulo="Ocorrência registrada">
+        <Cartao className="p-5">
+          <div className="mb-3 flex items-start gap-2.5 rounded-lg bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
+            <CheckCircle2 size={18} className="mt-px shrink-0" />
+            <span>
+              <b>Relato enviado.</b> O gestor já consegue ver a descrição e as fotos.
+            </span>
           </div>
           {gravidade === "GRAVE" && (
-            <div style={{ background: "#FBEAE7", color: "#A5301F", borderRadius: 10, padding: 16, fontSize: 14, marginBottom: 16 }}>
-              Ocorrência <strong>grave</strong>: não use o veículo antes de falar com o gestor.
+            <div className="mb-3 flex items-start gap-2.5 rounded-lg bg-red-50 px-3.5 py-3 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+              <AlertTriangle size={18} className="mt-px shrink-0" />
+              <span>
+                Ocorrência <b>grave</b>: não use o veículo antes de falar com o gestor.
+              </span>
             </div>
           )}
-          <a href="/campo" style={{ display: "block", textAlign: "center", padding: "11px", borderRadius: 8, background: "#2B4C8C", color: "#fff", fontSize: 14, fontWeight: 600, textDecoration: "none", marginBottom: 10 }}>
-            Voltar ao início
-          </a>
-          <button
-            onClick={() => {
-              setOk(false); setVeiculoId(""); setTipo(""); setGravidade("");
-              setLocal(""); setDescricao(""); setTerceiros(false); setFotos(null); setData(hoje);
-            }}
-            style={{ width: "100%", padding: "11px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-          >
-            Relatar outra ocorrência
-          </button>
-        </div>
-      </main>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <BotaoLink href="/campo" variante="primario" tamanho="lg" className="flex-1">
+              Voltar ao início
+            </BotaoLink>
+            <Botao
+              tamanho="lg"
+              className="flex-1"
+              onClick={() => {
+                setOk(false);
+                setVeiculoId("");
+                setTipo("");
+                setGravidade("");
+                setLocal("");
+                setDescricao("");
+                setTerceiros(false);
+                setFotos(null);
+                setData(hoje);
+              }}
+            >
+              Relatar outra ocorrência
+            </Botao>
+          </div>
+        </Cartao>
+      </Pagina>
     );
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: "#F4F6F9", padding: 20 }}>
-      <div style={{ maxWidth: 520, margin: "0 auto", background: "#fff", border: "1px solid #E3E9F0", borderRadius: 14, padding: 24, boxShadow: "0 8px 30px rgba(16,26,38,.06)" }}>
-        <a href="/campo" style={{ fontSize: 13, color: "#2B4C8C", textDecoration: "none" }}>← Voltar</a>
-        <h1 style={{ margin: "10px 0 2px", fontSize: 22 }}>Relatar ocorrência</h1>
-        <p style={{ color: "#6B7A8D", fontSize: 14, marginBottom: 20 }}>
-          Bateu, riscou, quebrou ou apareceu um defeito? Registre aqui com foto.
-        </p>
+    <Pagina
+      estreita
+      titulo="Relatar ocorrência"
+      subtitulo="Bateu, riscou, quebrou ou apareceu um defeito? Registre aqui, com foto."
+    >
+      {carregando ? (
+        <Cartao>
+          <Carregando />
+        </Cartao>
+      ) : (
+        <form onSubmit={salvar} className="space-y-3">
+          <Cartao titulo="1 · O que aconteceu">
+            <div className="space-y-3.5 p-4">
+              <Campo rotulo="Veículo">
+                <Select required value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {veiculos.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.modelo} — {v.placa}
+                      {v.status === "BLOQUEADO"
+                        ? " (bloqueado)"
+                        : v.status === "MANUTENCAO"
+                          ? " (em manutenção)"
+                          : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Campo>
 
-        {carregando ? (
-          <p style={{ color: "#6B7A8D", fontSize: 14 }}>Carregando…</p>
-        ) : (
-          <form onSubmit={salvar}>
-            <div style={secao}>1. O que aconteceu</div>
+              <Campo rotulo="Quem está relatando">
+                {ehGestor ? (
+                  <Select required value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
+                    <option value="">Selecione…</option>
+                    {tecnicos.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nome}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <div
+                    className={cx(
+                      "campo bg-slate-100",
+                      euId ? "text-slate-800" : "font-medium text-red-700",
+                    )}
+                  >
+                    {euId ? euNome : "Login sem técnico vinculado — fale com o gestor"}
+                  </div>
+                )}
+              </Campo>
 
-            <label style={label}>Veículo</label>
-            <select required value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)} style={input}>
-              <option value="">Selecione…</option>
-              {veiculos.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.modelo} — {v.placa}
-                  {v.status === "BLOQUEADO" ? " 🔴 (bloqueado)" : v.status === "MANUTENCAO" ? " 🔧 (manutenção)" : ""}
-                </option>
-              ))}
-            </select>
+              <Campo rotulo="Tipo">
+                <Select required value={tipo} onChange={(e) => setTipo(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {TIPOS.map(([v, t]) => (
+                    <option key={v} value={v}>
+                      {t}
+                    </option>
+                  ))}
+                </Select>
+              </Campo>
 
-            <label style={label}>Quem está relatando</label>
-            {ehGestor ? (
-              <select required value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)} style={input}>
-                <option value="">Selecione…</option>
-                {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-              </select>
-            ) : (
-              <div style={{ ...input, background: "#F4F6F9", color: euId ? "#101A26" : "#C0392B" }}>
-                {euId ? euNome : "Login sem técnico vinculado — fale com o gestor"}
-              </div>
-            )}
+              <Campo rotulo="Quando aconteceu">
+                <Input
+                  type="date"
+                  required
+                  max={hoje}
+                  value={data}
+                  onChange={(e) => setData(e.target.value)}
+                />
+              </Campo>
 
-            <label style={label}>Tipo</label>
-            <select required value={tipo} onChange={(e) => setTipo(e.target.value)} style={input}>
-              <option value="">Selecione…</option>
-              {TIPOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-            </select>
-
-            <label style={label}>Quando aconteceu</label>
-            <input type="date" required max={hoje} value={data} onChange={(e) => setData(e.target.value)} style={input} />
-
-            <label style={label}>Onde aconteceu (opcional)</label>
-            <input type="text" value={local} onChange={(e) => setLocal(e.target.value)} placeholder="ex.: estacionamento do cliente, Av. Brasil" style={input} />
-
-            <div style={secao}>2. Gravidade</div>
-            <div style={{ display: "flex", gap: 8, marginTop: 6, marginBottom: 16 }}>
-              {GRAVIDADES.map(([v, txt, cor]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setGravidade(v)}
-                  style={{
-                    flex: 1, padding: "11px 4px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer",
-                    border: gravidade === v ? `2px solid ${cor}` : "1px solid #CBD5E1",
-                    background: gravidade === v ? cor + "18" : "#fff",
-                    color: gravidade === v ? cor : "#101A26",
-                  }}
-                >
-                  {txt}
-                </button>
-              ))}
+              <Campo rotulo="Onde aconteceu (opcional)">
+                <Input
+                  type="text"
+                  value={local}
+                  onChange={(e) => setLocal(e.target.value)}
+                  placeholder="ex.: estacionamento do cliente, Av. Brasil"
+                />
+              </Campo>
             </div>
+          </Cartao>
 
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, fontSize: 14, fontWeight: 600, color: "#101A26" }}>
-              <input type="checkbox" checked={terceiros} onChange={(e) => setTerceiros(e.target.checked)} />
-              Envolveu outro veículo ou outra pessoa
-            </label>
+          <Cartao titulo="2 · Gravidade">
+            <div className="space-y-3.5 p-4">
+              <div className="flex gap-2">
+                {GRAVIDADES.map(([v, txt, ativo]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setGravidade(v)}
+                    className={cx(
+                      "toque flex-1 rounded-lg text-sm font-semibold ring-1 ring-inset transition",
+                      gravidade === v
+                        ? `ring-2 ${ativo}`
+                        : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50",
+                    )}
+                  >
+                    {txt}
+                  </button>
+                ))}
+              </div>
 
-            <label style={label}>Descreva o que aconteceu</label>
-            <textarea
-              required
-              rows={4}
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder="conte como foi, o que danificou e se alguém se machucou"
-              style={{ ...input, fontFamily: "inherit", resize: "vertical" }}
-            />
+              <label className="flex items-center gap-2 text-[13.5px] font-medium text-slate-700">
+                <Checkbox checked={terceiros} onChange={(e) => setTerceiros(e.target.checked)} />
+                Envolveu outro veículo ou outra pessoa
+              </label>
 
-            <div style={secao}>3. Fotos (obrigatório)</div>
-            <label style={label}>Fotografe o dano de perto e de longe.</label>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              multiple
-              required
-              onChange={(e) => setFotos(e.target.files)}
-              style={{ ...input, padding: 8 }}
-            />
+              <Campo rotulo="Descreva o que aconteceu">
+                <Textarea
+                  required
+                  rows={4}
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  placeholder="conte como foi, o que danificou e se alguém se machucou"
+                  className="resize-y"
+                />
+              </Campo>
+            </div>
+          </Cartao>
 
-            <button
-              type="submit"
-              disabled={salvando}
-              style={{ width: "100%", padding: "13px", borderRadius: 8, border: "none", background: salvando ? "#D89A90" : "#C0392B", color: "#fff", fontSize: 15, fontWeight: 600, cursor: salvando ? "default" : "pointer", marginTop: 8 }}
-            >
-              {salvando ? "Enviando…" : "Registrar ocorrência"}
-            </button>
+          <Cartao titulo="3 · Fotos (obrigatórias)">
+            <div className="p-4">
+              <Campo rotulo="Fotografe o dano de perto e de longe">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  required
+                  onChange={(e) => setFotos(e.target.files)}
+                  className="file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+                />
+              </Campo>
+            </div>
+          </Cartao>
 
-            {erro && <div style={{ color: "#C0392B", fontSize: 13, marginTop: 12 }}>{erro}</div>}
-          </form>
-        )}
-      </div>
-    </main>
+          <Botao
+            type="submit"
+            variante="primario"
+            tamanho="lg"
+            disabled={salvando}
+            className="w-full"
+          >
+            {salvando ? "Enviando…" : "Registrar ocorrência"}
+          </Botao>
+
+          {erro && <Aviso>{erro}</Aviso>}
+        </form>
+      )}
+    </Pagina>
   );
 }

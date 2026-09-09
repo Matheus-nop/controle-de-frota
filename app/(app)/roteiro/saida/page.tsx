@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { enviarFoto } from "@/lib/frota/foto";
+import { Aviso, Botao, BotaoLink, Campo, Cartao, Carregando, Input, Pagina, Select } from "@/components/ui";
 
 type Veiculo = { id: string; placa: string; modelo: string; km_atual: number | null };
 type Tecnico = { id: string; nome: string };
@@ -61,15 +64,7 @@ export default function RegistrarSaidaPage() {
     try {
       const supabase = createClient();
 
-      let fotoUrl: string | null = null;
-      if (foto && foto.length > 0) {
-        const f = foto[0];
-        const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
-        const path = `${veiculoId}/saida-${Date.now()}.${ext}`;
-        const up = await supabase.storage.from("roteiros").upload(path, f);
-        if (up.error) throw up.error;
-        fotoUrl = supabase.storage.from("roteiros").getPublicUrl(path).data.publicUrl;
-      }
+      const fotoUrl = await enviarFoto(supabase, "roteiros", `${veiculoId}/saida`, foto?.[0]);
 
       const { error } = await supabase.from("roteiros").insert({
         veiculo_id: veiculoId,
@@ -82,7 +77,9 @@ export default function RegistrarSaidaPage() {
 
       if (error) {
         if (error.code === "23505") {
-          setErro("Já existe um roteiro ABERTO para este veículo. Registre a chegada dele antes de abrir um novo.");
+          setErro(
+            "Já existe um roteiro ABERTO para este veículo. Registre a chegada dele antes de abrir um novo.",
+          );
         } else {
           setErro(error.message);
         }
@@ -97,73 +94,113 @@ export default function RegistrarSaidaPage() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%", marginTop: 6, marginBottom: 16, padding: "11px 12px",
-    borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 15, boxSizing: "border-box", background: "#fff",
-  };
-  const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "#101A26" };
-
   return (
-    <main style={{ minHeight: "100vh", background: "#F4F6F9", padding: 20 }}>
-      <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "1px solid #E3E9F0", borderRadius: 14, padding: 24, boxShadow: "0 8px 30px rgba(16,26,38,.06)" }}>
-        <a href="/" style={{ fontSize: 13, color: "#1F6FEB", textDecoration: "none" }}>← Voltar ao painel</a>
-        <h1 style={{ margin: "10px 0 2px", fontSize: 22 }}>Registrar saída</h1>
-        <p style={{ color: "#6B7A8D", fontSize: 14, marginBottom: 20 }}>
-          Abre um roteiro para o veículo. A chegada é registrada depois.
-        </p>
-
+    <Pagina
+      estreita
+      titulo="Registrar saída"
+      subtitulo="Abre um roteiro para o veículo. A chegada é registrada depois."
+    >
+      <Cartao className="p-5">
         {ok ? (
           <div>
-            <div style={{ background: "#E7F3EE", color: "#1B7A4B", borderRadius: 10, padding: 16, fontSize: 14, marginBottom: 16 }}>
-              Saída registrada! O veículo está na rua.
+            <div className="mb-4 flex items-start gap-2.5 rounded-lg bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
+              <CheckCircle2 size={18} className="mt-px shrink-0" />
+              <span>
+                <b>Saída registrada.</b> O veículo está na rua.
+              </span>
             </div>
-            <button
-              onClick={() => { setOk(false); setVeiculoId(""); setTecnicoId(""); setKm(""); setObs(""); setFoto(null); }}
-              style={{ width: "100%", padding: "11px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 10 }}
-            >
-              Registrar outra saída
-            </button>
-            <a href="/" style={{ display: "block", textAlign: "center", padding: "11px", borderRadius: 8, background: "#1F6FEB", color: "#fff", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-              Ir para o painel
-            </a>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Botao
+                tamanho="lg"
+                className="flex-1"
+                onClick={() => {
+                  setOk(false);
+                  setVeiculoId("");
+                  setTecnicoId("");
+                  setKm("");
+                  setObs("");
+                  setFoto(null);
+                }}
+              >
+                Registrar outra saída
+              </Botao>
+              <BotaoLink href="/campo" variante="primario" tamanho="lg" className="flex-1">
+                Voltar ao início
+              </BotaoLink>
+            </div>
           </div>
         ) : carregandoDados ? (
-          <p style={{ color: "#6B7A8D", fontSize: 14 }}>Carregando veículos e técnicos…</p>
+          <Carregando texto="Carregando veículos e técnicos…" />
         ) : (
-          <form onSubmit={salvar}>
-            <label htmlFor="veiculo" style={labelStyle}>Veículo</label>
-            <select id="veiculo" required value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)} style={inputStyle}>
-              <option value="">Selecione…</option>
-              {veiculos.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.modelo} — {v.placa}{v.km_atual != null ? ` (${v.km_atual} km)` : ""}
-                </option>
-              ))}
-            </select>
+          <form onSubmit={salvar} className="space-y-3.5">
+            <Campo rotulo="Veículo">
+              <Select required value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)}>
+                <option value="">Selecione…</option>
+                {veiculos.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.modelo} — {v.placa}
+                    {v.km_atual != null ? ` (${v.km_atual} km)` : ""}
+                  </option>
+                ))}
+              </Select>
+            </Campo>
 
-            <label htmlFor="tecnico" style={labelStyle}>Técnico</label>
-            <select id="tecnico" required value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)} style={inputStyle}>
-              <option value="">Selecione…</option>
-              {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
+            <Campo rotulo="Técnico">
+              <Select required value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
+                <option value="">Selecione…</option>
+                {tecnicos.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome}
+                  </option>
+                ))}
+              </Select>
+            </Campo>
 
-            <label htmlFor="km" style={labelStyle}>Km de saída</label>
-            <input id="km" type="number" inputMode="numeric" required value={km} onChange={(e) => setKm(e.target.value)} placeholder="ex.: 66402" style={inputStyle} />
+            <Campo
+              rotulo="Km de saída"
+              dica={
+                veiculoSel?.km_atual != null
+                  ? `Último km registrado deste veículo: ${veiculoSel.km_atual.toLocaleString("pt-BR")}.`
+                  : undefined
+              }
+            >
+              <Input
+                type="number"
+                inputMode="numeric"
+                required
+                value={km}
+                onChange={(e) => setKm(e.target.value)}
+                placeholder="ex.: 66402"
+              />
+            </Campo>
 
-            <label htmlFor="foto" style={labelStyle}>Foto do painel / hodômetro (opcional)</label>
-            <input id="foto" type="file" accept="image/*" capture="environment" onChange={(e) => setFoto(e.target.files)} style={{ ...inputStyle, padding: 8 }} />
+            <Campo rotulo="Foto do painel / hodômetro (opcional)">
+              <Input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => setFoto(e.target.files)}
+                className="file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+              />
+            </Campo>
 
-            <label htmlFor="obs" style={labelStyle}>Observação (opcional)</label>
-            <input id="obs" type="text" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="algo a registrar na saída" style={inputStyle} />
+            <Campo rotulo="Observação (opcional)">
+              <Input
+                type="text"
+                value={obs}
+                onChange={(e) => setObs(e.target.value)}
+                placeholder="algo a registrar na saída"
+              />
+            </Campo>
 
-            <button type="submit" disabled={salvando} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: salvando ? "#7CA0C9" : "#1F6FEB", color: "#fff", fontSize: 15, fontWeight: 600, cursor: salvando ? "default" : "pointer" }}>
+            <Botao type="submit" variante="primario" tamanho="lg" disabled={salvando} className="w-full">
               {salvando ? "Registrando…" : "Registrar saída"}
-            </button>
+            </Botao>
 
-            {erro && <div style={{ color: "#C0392B", fontSize: 13, marginTop: 12 }}>{erro}</div>}
+            {erro && <Aviso>{erro}</Aviso>}
           </form>
         )}
-      </div>
-    </main>
+      </Cartao>
+    </Pagina>
   );
 }

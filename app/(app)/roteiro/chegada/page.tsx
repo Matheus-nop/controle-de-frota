@@ -1,8 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { diaHoraDe } from "@/lib/frota/tempo";
+import { enviarFoto } from "@/lib/frota/foto";
+import {
+  Aviso,
+  Botao,
+  BotaoLink,
+  Campo,
+  Cartao,
+  Carregando,
+  Checkbox,
+  Input,
+  Pagina,
+  Select,
+  Vazio,
+} from "@/components/ui";
 
 type Aberto = {
   id: string;
@@ -53,7 +68,7 @@ export default function RegistrarChegadaPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.getUser();
     const [r, t] = await Promise.all([
@@ -69,11 +84,13 @@ export default function RegistrarChegadaPage() {
     setAbertos((r.data as Aberto[]) ?? []);
     setTecnicos((t.data as Tecnico[]) ?? []);
     setCarregando(false);
-  }
+  }, []);
 
   useEffect(() => {
-    carregar();
-  }, []);
+    (async () => {
+      await carregar();
+    })();
+  }, [carregar]);
 
   const sel = abertos.find((x) => x.id === roteiroId);
 
@@ -81,9 +98,7 @@ export default function RegistrarChegadaPage() {
   // para saber (sem roteiro escolhido ou campo vazio).
   const kmDigitado = parseInt(km, 10);
   const rodado =
-    sel && !Number.isNaN(kmDigitado) && kmDigitado >= sel.km_saida
-      ? kmDigitado - sel.km_saida
-      : null;
+    sel && !Number.isNaN(kmDigitado) && kmDigitado >= sel.km_saida ? kmDigitado - sel.km_saida : null;
   const kmAlto = rodado != null && rodado > KM_AVISO && rodado <= KM_ABSURDO;
   const kmAbsurdo = rodado != null && rodado > KM_ABSURDO;
 
@@ -136,14 +151,7 @@ export default function RegistrarChegadaPage() {
 
     let fotoUrl: string | null = null;
     try {
-      if (foto && foto.length > 0) {
-        const f = foto[0];
-        const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
-        const path = `${sel.id}/chegada-${Date.now()}.${ext}`;
-        const up = await supabase.storage.from("roteiros").upload(path, f);
-        if (up.error) throw up.error;
-        fotoUrl = supabase.storage.from("roteiros").getPublicUrl(path).data.publicUrl;
-      }
+      fotoUrl = await enviarFoto(supabase, "roteiros", `${sel.id}/chegada`, foto?.[0]);
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao enviar a foto.");
       setSalvando(false);
@@ -182,155 +190,187 @@ export default function RegistrarChegadaPage() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    marginTop: 6,
-    marginBottom: 16,
-    padding: "11px 12px",
-    borderRadius: 8,
-    border: "1px solid #CBD5E1",
-    fontSize: 15,
-    boxSizing: "border-box",
-    background: "#fff",
-  };
-  const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "#101A26" };
-
   function dataHora(s: string) {
     return diaHoraDe(s) ?? "";
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: "#F4F6F9", padding: 20 }}>
-      <div style={{ maxWidth: 460, margin: "0 auto", background: "#fff", border: "1px solid #E3E9F0", borderRadius: 14, padding: 24, boxShadow: "0 8px 30px rgba(16,26,38,.06)" }}>
-        <a href="/" style={{ fontSize: 13, color: "#1F6FEB", textDecoration: "none" }}>← Voltar ao painel</a>
-        <h1 style={{ margin: "10px 0 2px", fontSize: 22 }}>Registrar chegada</h1>
-        <p style={{ color: "#6B7A8D", fontSize: 14, marginBottom: 20 }}>
-          Fecha um roteiro que está na rua.
-        </p>
-
+    <Pagina estreita titulo="Registrar chegada" subtitulo="Fecha um roteiro que está na rua.">
+      <Cartao className="p-5">
         {ok ? (
           <div>
-            <div style={{ background: "#E7F3EE", color: "#1B7A4B", borderRadius: 10, padding: 16, fontSize: 14, marginBottom: 16 }}>
-              Chegada registrada! Roteiro fechado.
+            <div className="mb-4 flex items-start gap-2.5 rounded-lg bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
+              <CheckCircle2 size={18} className="mt-px shrink-0" />
+              <span>
+                <b>Chegada registrada.</b> Roteiro fechado.
+              </span>
             </div>
-            <button
-              onClick={() => {
-                setOk(false);
-                setRoteiroId("");
-                setKm("");
-                setObs("");
-                setPendencia(false);
-                setDescPend("");
-                setConfirmaLongo(false);
-                setMotivoLongo("");
-                setFoto(null);
-                setCarregando(true);
-                carregar();
-              }}
-              style={{ width: "100%", padding: "11px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 10 }}
-            >
-              Registrar outra chegada
-            </button>
-            <a href="/" style={{ display: "block", textAlign: "center", padding: "11px", borderRadius: 8, background: "#1F6FEB", color: "#fff", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-              Ir para o painel
-            </a>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Botao
+                tamanho="lg"
+                className="flex-1"
+                onClick={() => {
+                  setOk(false);
+                  setRoteiroId("");
+                  setKm("");
+                  setObs("");
+                  setPendencia(false);
+                  setDescPend("");
+                  setConfirmaLongo(false);
+                  setMotivoLongo("");
+                  setFoto(null);
+                  setCarregando(true);
+                  void carregar();
+                }}
+              >
+                Registrar outra chegada
+              </Botao>
+              <BotaoLink href="/campo" variante="primario" tamanho="lg" className="flex-1">
+                Voltar ao início
+              </BotaoLink>
+            </div>
           </div>
         ) : carregando ? (
-          <p style={{ color: "#6B7A8D", fontSize: 14 }}>Carregando roteiros abertos…</p>
+          <Carregando texto="Carregando roteiros abertos…" />
         ) : abertos.length === 0 ? (
-          <p style={{ color: "#6B7A8D", fontSize: 14 }}>
-            Nenhum roteiro aberto no momento. Registre uma saída primeiro.
-          </p>
+          <Vazio
+            titulo="Nenhum roteiro aberto no momento."
+            texto="Só é possível registrar a chegada de um veículo que teve a saída lançada."
+          >
+            <BotaoLink href="/roteiro/saida" variante="primario">
+              Registrar uma saída
+            </BotaoLink>
+          </Vazio>
         ) : (
-          <form onSubmit={salvar}>
-            <label htmlFor="roteiro" style={labelStyle}>Roteiro aberto</label>
-            <select id="roteiro" required value={roteiroId} onChange={(e) => selecionar(e.target.value)} style={inputStyle}>
-              <option value="">Selecione…</option>
-              {abertos.map((r) => {
-                const v = one(r.veiculo);
-                const t = one(r.tecnico);
-                return (
-                  <option key={r.id} value={r.id}>
-                    {v?.modelo} {v?.placa} — {t?.nome} — saiu {dataHora(r.saida_em)} ({r.km_saida} km)
-                  </option>
-                );
-              })}
-            </select>
+          <form onSubmit={salvar} className="space-y-3.5">
+            <Campo rotulo="Roteiro aberto">
+              <Select required value={roteiroId} onChange={(e) => selecionar(e.target.value)}>
+                <option value="">Selecione…</option>
+                {abertos.map((r) => {
+                  const v = one(r.veiculo);
+                  const t = one(r.tecnico);
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {v?.modelo} {v?.placa} — {t?.nome} — saiu {dataHora(r.saida_em)} ({r.km_saida} km)
+                    </option>
+                  );
+                })}
+              </Select>
+            </Campo>
 
             {sel && (
               <>
-                <label htmlFor="km" style={labelStyle}>Km de chegada (saída: {sel.km_saida})</label>
-                <input id="km" type="number" inputMode="numeric" required value={km} onChange={(e) => setKm(e.target.value)} placeholder="ex.: 66655" style={inputStyle} />
+                <Campo rotulo="Km de chegada" dica={`Km na saída: ${nf(sel.km_saida)}.`}>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    required
+                    value={km}
+                    onChange={(e) => setKm(e.target.value)}
+                    placeholder="ex.: 66655"
+                  />
+                </Campo>
 
-                <label htmlFor="tecc" style={labelStyle}>Técnico na chegada</label>
-                <select id="tecc" value={tecnicoChegadaId} onChange={(e) => setTecnicoChegadaId(e.target.value)} style={inputStyle}>
-                  {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
+                <Campo rotulo="Técnico na chegada">
+                  <Select value={tecnicoChegadaId} onChange={(e) => setTecnicoChegadaId(e.target.value)}>
+                    {tecnicos.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nome}
+                      </option>
+                    ))}
+                  </Select>
+                </Campo>
 
                 {kmAbsurdo && (
-                  <div style={{ background: "#FAE5E7", border: "1px solid #E9B7BC", borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "#8E2129" }}>
+                  <div className="rounded-lg bg-red-50 p-3.5 ring-1 ring-inset ring-red-200">
+                    <div className="flex items-center gap-2 text-sm font-bold text-red-800">
+                      <AlertTriangle size={16} />
                       {nf(rodado!)} km num roteiro só?
                     </div>
-                    <p style={{ fontSize: 13, color: "#8E2129", margin: "6px 0 0", lineHeight: 1.45 }}>
-                      Esse número é o hodômetro inteiro, não a distância. Confira o painel do
-                      veículo e digite o km que está marcado agora.
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-red-800">
+                      Esse número é o hodômetro inteiro, não a distância. Confira o painel do veículo e
+                      digite o km que está marcado agora.
                     </p>
                   </div>
                 )}
 
                 {kmAlto && (
-                  <div style={{ background: "#FAEFD6", border: "1px solid #E4CE95", borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "#7A5403" }}>
+                  <div className="rounded-lg bg-amber-50 p-3.5 ring-1 ring-inset ring-amber-200">
+                    <div className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                      <AlertTriangle size={16} />
                       Roteiro longo: {nf(rodado!)} km
                     </div>
-                    <p style={{ fontSize: 13, color: "#7A5403", margin: "6px 0 10px", lineHeight: 1.45 }}>
-                      Dá para registrar normalmente. Só confirme que o km está certo — o gestor
-                      recebe esse roteiro marcado para conferir.
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-amber-800">
+                      Dá para registrar normalmente. Só confirme que o km está certo — o gestor recebe
+                      esse roteiro marcado para conferir.
                     </p>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, color: "#7A5403", marginBottom: 10 }}>
-                      <input
-                        type="checkbox"
+                    <label className="my-2.5 flex items-center gap-2 text-[13.5px] font-semibold text-amber-800">
+                      <Checkbox
                         checked={confirmaLongo}
-                        onChange={(e) => { setConfirmaLongo(e.target.checked); setErro(null); }}
+                        onChange={(e) => {
+                          setConfirmaLongo(e.target.checked);
+                          setErro(null);
+                        }}
                       />
                       Confirmo: rodei mesmo {nf(rodado!)} km
                     </label>
-                    <input
+                    <Input
                       type="text"
                       value={motivoLongo}
                       onChange={(e) => setMotivoLongo(e.target.value)}
                       placeholder="para onde foi? ex.: entrega em Juiz de Fora"
-                      style={{ ...inputStyle, marginTop: 0, marginBottom: 0, borderColor: "#E4CE95" }}
                     />
                   </div>
                 )}
 
-                <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <input type="checkbox" checked={pendencia} onChange={(e) => setPendencia(e.target.checked)} />
+                <label className="flex items-center gap-2 text-[13px] font-medium text-slate-700">
+                  <Checkbox checked={pendencia} onChange={(e) => setPendencia(e.target.checked)} />
                   Houve pendência no roteiro
                 </label>
                 {pendencia && (
-                  <input type="text" value={descPend} onChange={(e) => setDescPend(e.target.value)} placeholder="descreva a pendência" style={inputStyle} />
+                  <Input
+                    type="text"
+                    value={descPend}
+                    onChange={(e) => setDescPend(e.target.value)}
+                    placeholder="descreva a pendência"
+                  />
                 )}
 
-                <label htmlFor="obs" style={labelStyle}>Observação (opcional)</label>
-                <input id="obs" type="text" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="algo a registrar na chegada" style={inputStyle} />
+                <Campo rotulo="Observação (opcional)">
+                  <Input
+                    type="text"
+                    value={obs}
+                    onChange={(e) => setObs(e.target.value)}
+                    placeholder="algo a registrar na chegada"
+                  />
+                </Campo>
 
-                <label htmlFor="foto" style={labelStyle}>Foto do painel / hodômetro (opcional)</label>
-                <input id="foto" type="file" accept="image/*" capture="environment"
-                  onChange={(e) => setFoto(e.target.files)} style={{ ...inputStyle, padding: 8 }} />
-                           </>
-                        )}
+                <Campo rotulo="Foto do painel / hodômetro (opcional)">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => setFoto(e.target.files)}
+                    className="file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+                  />
+                </Campo>
+              </>
+            )}
 
-            <button type="submit" disabled={salvando || !sel} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: salvando || !sel ? "#7CA0C9" : "#1F6FEB", color: "#fff", fontSize: 15, fontWeight: 600, cursor: salvando || !sel ? "default" : "pointer" }}>
+            <Botao
+              type="submit"
+              variante="primario"
+              tamanho="lg"
+              disabled={salvando || !sel}
+              className="w-full"
+            >
               {salvando ? "Registrando…" : "Registrar chegada"}
-            </button>
+            </Botao>
 
-            {erro && <div style={{ color: "#C0392B", fontSize: 13, marginTop: 12 }}>{erro}</div>}
+            {erro && <Aviso>{erro}</Aviso>}
           </form>
         )}
-      </div>
-    </main>
+      </Cartao>
+    </Pagina>
   );
 }
