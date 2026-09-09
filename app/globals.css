@@ -1,28 +1,132 @@
 @import "tailwindcss";
 
-/* O painel (components/painel/PainelFrota.jsx) injeta o proprio CSS via <style>
-   e define o fundo em .app. Aqui ficam so os padroes globais e a tela de login. */
+/* Design system compartilhado com o app de Roteiros (roteiros/src/index.css).
+   Os dois sistemas são do mesmo grupo e a mesma pessoa alterna entre eles no
+   mesmo dia — logo, mesma paleta, mesma tipografia e os mesmos utilitários.
+   Mudou lá, muda aqui. */
 
+@theme {
+  /* Azul institucional do logotipo (o "OPÇÃO"). */
+  --color-brand-50: #eef3f8;
+  --color-brand-100: #d9e4ef;
+  --color-brand-200: #b3c8de;
+  --color-brand-300: #7fa3c4;
+  --color-brand-400: #4a7ba6;
+  --color-brand-500: #2b6491;
+  --color-brand-600: #1f4f7f;
+  --color-brand-700: #12365a;
+  --color-brand-800: #0d2a47;
+  --color-brand-900: #081c31;
+
+  /* Âmbar da engrenagem do logotipo: usado como acento, nunca como fundo de tela. */
+  --color-acento-300: #fcd34d;
+  --color-acento-400: #fbbf24;
+  --color-acento-500: #f59e0b;
+  --color-acento-600: #d97706;
+
+  /* Ação primária (botões, abas ativas). */
+  --color-acao-500: #1a56db;
+  --color-acao-600: #1748c9;
+
+  --color-accent: #f59e0b;
+  --font-sans: var(--fonte-inter), "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* Altura da barra superior + abas. Serve de referência para o topo fixo das
+   colunas do quadro de operação e para a altura útil das telas. */
 :root {
-  --background: #f4f6f9;
-  --foreground: #101a26;
+  --topo-h: 56px;
+  --abas-h: 44px;
+
+  /* Recorte do sistema (notch, barra de status, barra de gestos). Em variável e
+     não em `env()` solto: assim o topo fixo e o topo das abas usam o MESMO
+     valor. Fora do PWA é 0. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-html,
-body {
-  height: 100%;
+/* Utilitários (em @layer components para que as utilities do Tailwind prevaleçam) */
+@layer components {
+  .tabela th {
+    @apply sticky top-0 z-10 bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-200 whitespace-nowrap;
+  }
+  .tabela td {
+    @apply px-3 py-2 text-sm border-b border-slate-100 align-middle;
+  }
+  .tabela tbody tr:hover {
+    @apply bg-brand-50/60;
+  }
+  .tabela tbody tr.selecionada {
+    @apply bg-brand-50;
+  }
+  .campo {
+    @apply block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:bg-slate-100 disabled:text-slate-500;
+  }
+  .rotulo {
+    @apply mb-1 block text-xs font-medium text-slate-600;
+  }
+  /* A placa é identificador: monoespaçada e sempre legível de relance. */
+  .placa {
+    @apply inline-flex items-center rounded-md border border-slate-300 bg-slate-50 px-1.5 py-0.5 font-mono text-[12px] font-bold tracking-[0.04em] text-slate-800;
+  }
+
+  /* Rolagem discreta, usada nas faixas horizontais (abas, quadro de operação). */
+  .rolagem-fina {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
+  }
+  .rolagem-fina::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+  .rolagem-fina::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .rolagem-fina::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300;
+  }
+  .rolagem-fina::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+
+  /* Alvo de toque confortável nas telas de campo (dedo, não mouse). */
+  .toque {
+    @apply min-h-[44px] select-none;
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--background);
-  color: var(--foreground);
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
+/* Área segura do sistema (barra inferior de gestos, notch). */
+.pb-segura {
+  padding-bottom: calc(var(--safe-bottom) + 0.5rem);
+}
+.pt-segura {
+  padding-top: var(--safe-top);
+}
+
+/* Impressão: a ordem de serviço e o resumo do painel saem em papel. */
+@media print {
+  @page {
+    margin: 8mm;
+  }
+  body {
+    background: #fff;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

@@ -15,3 +15,6 @@ node_modules/
 # de deduplicacao e o SQL do historico, e esses arquivos carregam os mesmos
 # nomes. O repositorio e publico.
 dados-origem/
+
+# saida do tsc --noEmit
+*.tsbuildinfo
