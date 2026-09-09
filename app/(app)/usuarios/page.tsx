@@ -1,7 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  Aviso,
+  Badge,
+  Botao,
+  Campo,
+  Cartao,
+  Carregando,
+  Input,
+  Pagina,
+  Select,
+  cx,
+  type Tom,
+} from "@/components/ui";
 
 // Cadastro de acesso.
 //
@@ -36,26 +49,17 @@ const PAPEIS = [
   { valor: "PONTO", rotulo: "Ponto", ajuda: "Só lê o horário dos roteiros, em /ponto. Não escreve em nada." },
 ];
 
-const CORES: Record<string, string> = {
-  GESTOR: "#2B4C8C",
-  PCM: "#C08306",
-  PONTO: "#1B9E6B",
-  TECNICO: "#53607A",
+const TOM_PAPEL: Record<string, Tom> = {
+  GESTOR: "info",
+  PCM: "atencao",
+  PONTO: "ok",
+  TECNICO: "mudo",
 };
-
-const input: React.CSSProperties = {
-  width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #CBD5E1",
-  fontSize: 14, boxSizing: "border-box", background: "#fff",
-};
-const lbl: React.CSSProperties = {
-  fontSize: 12, fontWeight: 600, color: "#53607A", marginBottom: 4, display: "block",
-};
-const cartao: React.CSSProperties = {
-  background: "#fff", border: "1px solid #E3E9F0", borderRadius: 12, padding: 16,
-};
-const botao: React.CSSProperties = {
-  padding: "9px 16px", borderRadius: 8, border: "none", background: "#2B4C8C",
-  color: "#fff", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+const FAIXA_PAPEL: Record<string, string> = {
+  GESTOR: "border-l-brand-600",
+  PCM: "border-l-amber-500",
+  PONTO: "border-l-emerald-600",
+  TECNICO: "border-l-slate-300",
 };
 
 // "marcia.souza@frota.local" -> "marcia.souza". É o que a pessoa digita.
@@ -81,7 +85,7 @@ export default function UsuariosPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.getUser();
 
@@ -89,7 +93,9 @@ export default function UsuariosPage() {
       supabase.from("tecnicos").select("id, nome, papel, ativo, user_id").order("nome"),
       supabase.rpc("logins_sem_pessoa"),
       supabase.rpc("emails_do_time"),
-      fetch("/api/usuarios").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/usuarios")
+        .then((r) => r.json())
+        .catch(() => ({})),
     ]);
 
     setPessoas((pes.data as Pessoa[]) ?? []);
@@ -104,80 +110,69 @@ export default function UsuariosPage() {
     );
     setAdminDisponivel(!!cfg.adminDisponivel);
     setCarregando(false);
-  }
+  }, []);
 
   useEffect(() => {
-    carregar();
-  }, []);
+    (async () => {
+      await carregar();
+    })();
+  }, [carregar]);
 
   const semLogin = pessoas.filter((p) => !p.user_id);
 
   return (
-    <main style={{ minHeight: "100vh", background: "#EBEEF4" }}>
-      <header style={{ background: "linear-gradient(180deg,#17263F,#223B63)", padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logowhite.png" alt="Grupo Nova Opção" style={{ height: 30, display: "block" }} />
-        <span style={{ color: "#AEB8C6", fontSize: 13, fontWeight: 600 }}>Usuários e acesso</span>
-        <a href="/" style={{ marginLeft: "auto", color: "#C6D0DE", fontSize: 13, textDecoration: "none", fontWeight: 600 }}>
-          ← Painel
-        </a>
-      </header>
+    <Pagina
+      titulo="Quem entra no app"
+      subtitulo="O login nasce no Supabase; o nome e o papel nascem aqui."
+    >
+      <ComoCriar adminDisponivel={adminDisponivel} />
 
-      <div style={{ maxWidth: 820, margin: "0 auto", padding: 20 }}>
-        <h1 style={{ fontSize: 21, margin: "4px 0 2px" }}>Quem entra no app</h1>
-        <p style={{ color: "#53607A", fontSize: 14, marginBottom: 20 }}>
-          O login nasce no Supabase; o nome e o papel nascem aqui.
-        </p>
-
-        <ComoCriar adminDisponivel={adminDisponivel} />
-
-        <h2 style={{ fontSize: 15, margin: "24px 0 10px" }}>
-          Logins aguardando cadastro
-          {logins.length > 0 && (
-            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#C08306", background: "#FAEFD6", borderRadius: 20, padding: "2px 9px" }}>
-              {logins.length}
-            </span>
-          )}
-        </h2>
-
-        {erro && (
-          <div style={{ ...cartao, color: "#8E2129", background: "#FAE5E7", borderColor: "#E9B7BC", fontSize: 13.5, marginBottom: 10 }}>
-            {erro}
-          </div>
+      <h2 className="mb-2.5 mt-6 flex items-center gap-2 text-[15px] font-semibold text-slate-900">
+        Logins aguardando cadastro
+        {logins.length > 0 && (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[12px] font-bold tabular-nums text-amber-700">
+            {logins.length}
+          </span>
         )}
+      </h2>
 
-        {!carregando && logins.length === 0 && !erro && (
-          <div style={{ ...cartao, color: "#8591A5", fontSize: 13.5 }}>
-            Nenhum login pendente. Todo mundo que entra no app tem nome e papel.
-          </div>
-        )}
+      {erro && <Aviso>{erro}</Aviso>}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {logins.map((l) => (
-            <Vincular key={l.user_id} login={l} semLogin={semLogin} onPronto={carregar} />
-          ))}
-        </div>
+      {!carregando && logins.length === 0 && !erro && (
+        <Cartao className="px-4 py-3.5 text-[13.5px] text-slate-500">
+          Nenhum login pendente. Todo mundo que entra no app tem nome e papel.
+        </Cartao>
+      )}
 
-        <h2 style={{ fontSize: 15, margin: "26px 0 10px" }}>
-          Cadastro {carregando ? "" : `· ${pessoas.length} pessoa(s)`}
-        </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {pessoas.map((p) => (
-            <Linha
-              key={p.id}
-              p={p}
-              email={p.user_id ? emails[p.user_id] : undefined}
-              adminDisponivel={adminDisponivel}
-              onMudou={carregar}
-            />
-          ))}
-          {!carregando && pessoas.length === 0 && (
-            <div style={{ ...cartao, color: "#8591A5", fontSize: 13.5 }}>Ninguém cadastrado ainda.</div>
-          )}
-          {carregando && <div style={{ ...cartao, color: "#8591A5", fontSize: 13.5 }}>Carregando…</div>}
-        </div>
+      <div className="flex flex-col gap-2.5">
+        {logins.map((l) => (
+          <Vincular key={l.user_id} login={l} semLogin={semLogin} onPronto={carregar} />
+        ))}
       </div>
-    </main>
+
+      <h2 className="mb-2.5 mt-6 text-[15px] font-semibold text-slate-900">
+        Cadastro {carregando ? "" : `· ${pessoas.length} pessoa(s)`}
+      </h2>
+      <div className="flex flex-col gap-2.5">
+        {pessoas.map((p) => (
+          <LinhaPessoa
+            key={p.id}
+            p={p}
+            email={p.user_id ? emails[p.user_id] : undefined}
+            adminDisponivel={adminDisponivel}
+            onMudou={carregar}
+          />
+        ))}
+        {!carregando && pessoas.length === 0 && (
+          <Cartao className="px-4 py-3.5 text-[13.5px] text-slate-500">Ninguém cadastrado ainda.</Cartao>
+        )}
+        {carregando && (
+          <Cartao>
+            <Carregando />
+          </Cartao>
+        )}
+      </div>
+    </Pagina>
   );
 }
 
@@ -185,51 +180,60 @@ export default function UsuariosPage() {
 function ComoCriar({ adminDisponivel }: { adminDisponivel: boolean }) {
   const [aberto, setAberto] = useState(false);
   return (
-    <div style={{ ...cartao, border: "1px solid #C4CCDA", background: "#F4F6FB" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 14, fontWeight: 650 }}>Criar um login novo</span>
-        <span style={{ fontSize: 12.5, color: "#53607A" }}>
+    <Cartao className="bg-slate-50 p-4">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="text-sm font-semibold text-slate-900">Criar um login novo</span>
+        <span className="text-[12.5px] text-slate-500">
           é no painel do Supabase — depois ele aparece aqui embaixo
         </span>
-        <button
-          onClick={() => setAberto((x) => !x)}
-          style={{ marginLeft: "auto", background: "#fff", border: "1px solid #C4CCDA", borderRadius: 8, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, color: "#2B4C8C", cursor: "pointer" }}
-        >
+        <Botao tamanho="sm" className="ml-auto" onClick={() => setAberto((x) => !x)}>
           {aberto ? "Fechar" : "Como faz"}
-        </button>
+        </Botao>
       </div>
 
       {aberto && (
-        <ol style={{ fontSize: 13.5, color: "#16233C", lineHeight: 1.65, margin: "12px 0 0", paddingLeft: 20 }}>
-          <li>Supabase → <b>Authentication</b> → <b>Add user</b> → <b>Create new user</b>.</li>
+        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[13.5px] leading-relaxed text-slate-700">
+          <li>
+            Supabase → <b>Authentication</b> → <b>Add user</b> → <b>Create new user</b>.
+          </li>
           <li>
             E-mail: quem não tem e-mail de verdade usa o interno,{" "}
-            <b>primeiro.ultimo@frota.local</b> (ex.: <code>marcia.souza@frota.local</code>).
-            No app a pessoa digita só <b>marcia.souza</b> — o resto é completado sozinho.
+            <b>primeiro.ultimo@frota.local</b> (ex.: <code>marcia.souza@frota.local</code>). No app a
+            pessoa digita só <b>marcia.souza</b> — o resto é completado sozinho.
           </li>
           <li>
-            Senha: mínimo 8 caracteres. Marque <b>Auto Confirm User</b> — sem isso o
-            Supabase espera uma confirmação por e-mail que nunca vai chegar num
-            endereço <code>@frota.local</code>, e o login não entra.
+            Senha: mínimo 8 caracteres. Marque <b>Auto Confirm User</b> — sem isso o Supabase espera
+            uma confirmação por e-mail que nunca vai chegar num endereço <code>@frota.local</code>, e
+            o login não entra.
           </li>
-          <li>Volte aqui: o login aparece em <b>&ldquo;Logins aguardando cadastro&rdquo;</b>. Dê o nome e o papel.</li>
+          <li>
+            Volte aqui: o login aparece em <b>&ldquo;Logins aguardando cadastro&rdquo;</b>. Dê o nome
+            e o papel.
+          </li>
         </ol>
       )}
 
       {aberto && !adminDisponivel && (
-        <p style={{ fontSize: 12, color: "#8591A5", marginTop: 12, lineHeight: 1.5 }}>
+        <p className="mt-3 text-[12px] leading-relaxed text-slate-400">
           Dá para criar o login direto por esta tela também, mas isso exige a chave{" "}
-          <code>SUPABASE_SERVICE_ROLE_KEY</code> no ambiente do app (Vercel → Settings →
-          Environment Variables). Enquanto ela não existir, o caminho é o de cima — e ele
-          funciona igual.
+          <code>SUPABASE_SERVICE_ROLE_KEY</code> no ambiente do app (Vercel → Settings → Environment
+          Variables). Enquanto ela não existir, o caminho é o de cima — e ele funciona igual.
         </p>
       )}
-    </div>
+    </Cartao>
   );
 }
 
 /* ------------------------- login -> pessoa (o vínculo) -------------------- */
-function Vincular({ login, semLogin, onPronto }: { login: Login; semLogin: Pessoa[]; onPronto: () => void }) {
+function Vincular({
+  login,
+  semLogin,
+  onPronto,
+}: {
+  login: Login;
+  semLogin: Pessoa[];
+  onPronto: () => void;
+}) {
   const [tecnicoId, setTecnicoId] = useState(""); // "" = pessoa nova
   const [nome, setNome] = useState(chutarNome(login.email));
   const [papel, setPapel] = useState("TECNICO");
@@ -269,78 +273,96 @@ function Vincular({ login, semLogin, onPronto }: { login: Login; semLogin: Pesso
   }
 
   return (
-    <div style={{ ...cartao, borderLeft: "5px solid #C08306" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-        <span style={{ fontWeight: 650, fontSize: 14.5, fontFamily: "ui-monospace,monospace" }}>
+    <Cartao className="border-l-4 border-l-amber-500 p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2.5">
+        <span className="font-mono text-[14.5px] font-semibold text-slate-900">
           {soUsuario(login.email)}
         </span>
-        <span style={{ fontSize: 12, color: "#8591A5" }}>{login.email}</span>
-        <span style={{ fontSize: 11.5, color: "#C08306", fontWeight: 600, marginLeft: "auto" }}>
+        <span className="text-[12px] text-slate-400">{login.email}</span>
+        <span className="ml-auto text-[11.5px] font-semibold text-amber-700">
           sem nome e sem papel
         </span>
       </div>
 
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))" }}>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3">
         {semLogin.length > 0 && (
-          <div>
-            <label style={lbl}>Quem é</label>
-            <select style={input} value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
-              <option value="">➕ Pessoa nova</option>
+          <Campo
+            rotulo="Quem é"
+            dica="Quem já está no cadastro tem que ser escolhido aqui — criar de novo faria a mesma pessoa aparecer duas vezes nos roteiros."
+          >
+            <Select value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
+              <option value="">Pessoa nova</option>
               <optgroup label="Já cadastrado, ainda sem login">
-                {semLogin.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                {semLogin.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                  </option>
+                ))}
               </optgroup>
-            </select>
-            <div style={{ fontSize: 11.5, color: "#8591A5", marginTop: 4 }}>
-              Quem já está no cadastro tem que ser escolhido aqui — criar de novo faria
-              a mesma pessoa aparecer duas vezes nos roteiros.
-            </div>
-          </div>
+            </Select>
+          </Campo>
         )}
 
         {!existente && (
-          <div>
-            <label style={lbl}>Nome completo</label>
-            <input style={input} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="ex.: Márcia Souza" />
-            <div style={{ fontSize: 11.5, color: "#8591A5", marginTop: 4 }}>
-              Chutado a partir do usuário. Confira: é o nome que vai em todo roteiro dela.
-            </div>
-          </div>
+          <Campo
+            rotulo="Nome completo"
+            dica="Chutado a partir do usuário. Confira: é o nome que vai em todo roteiro dela."
+          >
+            <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="ex.: Márcia Souza" />
+          </Campo>
         )}
 
-        <div>
-          <label style={lbl}>Papel</label>
-          <select style={input} value={papel} onChange={(e) => setPapel(e.target.value)}>
-            {PAPEIS.map((x) => <option key={x.valor} value={x.valor}>{x.rotulo}</option>)}
-          </select>
-          <div style={{ fontSize: 11.5, color: "#8591A5", marginTop: 4 }}>{ajuda}</div>
-        </div>
+        <Campo rotulo="Papel" dica={ajuda}>
+          <Select value={papel} onChange={(e) => setPapel(e.target.value)}>
+            {PAPEIS.map((x) => (
+              <option key={x.valor} value={x.valor}>
+                {x.rotulo}
+              </option>
+            ))}
+          </Select>
+        </Campo>
       </div>
 
-      {erro && <div style={{ color: "#C0392B", fontSize: 13, marginTop: 10 }}>{erro}</div>}
+      {erro && (
+        <div className="mt-2.5">
+          <Aviso>{erro}</Aviso>
+        </div>
+      )}
 
-      <button
+      <Botao
+        variante="primario"
+        className="mt-3.5"
         onClick={vincular}
         disabled={salvando || (!existente && !nome.trim())}
-        style={{ ...botao, marginTop: 14, opacity: salvando || (!existente && !nome.trim()) ? 0.6 : 1 }}
       >
-        {salvando ? "Vinculando…" : existente ? `Este login é do ${existente.nome.split(" ")[0]}` : "Cadastrar pessoa"}
-      </button>
-    </div>
+        {salvando
+          ? "Vinculando…"
+          : existente
+            ? `Este login é do ${existente.nome.split(" ")[0]}`
+            : "Cadastrar pessoa"}
+      </Botao>
+    </Cartao>
   );
 }
 
 /* ------------------------------ uma pessoa ------------------------------- */
-function Linha({
-  p, email, adminDisponivel, onMudou,
-}: { p: Pessoa; email?: string; adminDisponivel: boolean; onMudou: () => void }) {
+function LinhaPessoa({
+  p,
+  email,
+  adminDisponivel,
+  onMudou,
+}: {
+  p: Pessoa;
+  email?: string;
+  adminDisponivel: boolean;
+  onMudou: () => void;
+}) {
   const [aberto, setAberto] = useState(false);
   const [papel, setPapel] = useState(p.papel);
   const [senha, setSenha] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-
-  const cor = CORES[p.papel] ?? "#53607A";
 
   async function enviar(mudanca: Record<string, unknown>, recado: string) {
     setSalvando(true);
@@ -365,97 +387,107 @@ function Linha({
   }
 
   return (
-    <div style={{ ...cartao, borderLeft: `5px solid ${cor}`, opacity: p.ativo ? 1 : 0.62 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 650, fontSize: 14.5 }}>{p.nome}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: cor, background: cor + "18", borderRadius: 5, padding: "2px 8px" }}>
-          {p.papel}
-        </span>
-        {email && (
-          <span style={{ fontSize: 12, color: "#8591A5", fontFamily: "ui-monospace,monospace" }}>
-            {soUsuario(email)}
-          </span>
-        )}
-        {!p.user_id && <span style={{ fontSize: 11.5, color: "#C08306", fontWeight: 600 }}>sem login</span>}
-        {!p.ativo && <span style={{ fontSize: 11.5, color: "#C0392B", fontWeight: 600 }}>desligado</span>}
-        <button
-          onClick={() => setAberto((x) => !x)}
-          style={{ marginLeft: "auto", background: "none", border: "1px solid #DBE0EA", borderRadius: 8, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, color: "#2B4C8C", cursor: "pointer" }}
-        >
+    <Cartao
+      className={cx("border-l-4 p-4", FAIXA_PAPEL[p.papel] ?? "border-l-slate-300", !p.ativo && "opacity-60")}
+    >
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="text-[14.5px] font-semibold text-slate-900">{p.nome}</span>
+        <Badge tom={TOM_PAPEL[p.papel] ?? "mudo"}>{p.papel}</Badge>
+        {email && <span className="font-mono text-[12px] text-slate-400">{soUsuario(email)}</span>}
+        {!p.user_id && <span className="text-[11.5px] font-semibold text-amber-700">sem login</span>}
+        {!p.ativo && <span className="text-[11.5px] font-semibold text-red-700">desligado</span>}
+        <Botao tamanho="sm" className="ml-auto" onClick={() => setAberto((x) => !x)}>
           {aberto ? "Fechar" : "Gerenciar"}
-        </button>
+        </Botao>
       </div>
 
-      {aviso && <div style={{ color: "#1B7A4B", fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>{aviso}</div>}
-      {erro && <div style={{ color: "#C0392B", fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>{erro}</div>}
+      {aviso && <p className="mt-2 text-[12.5px] leading-relaxed text-emerald-700">{aviso}</p>}
+      {erro && <p className="mt-2 text-[12.5px] leading-relaxed text-red-700">{erro}</p>}
 
       {aberto && (
-        <div style={{ marginTop: 14, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))" }}>
-          <div>
-            <label style={lbl}>Papel</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <select style={input} value={papel} onChange={(e) => setPapel(e.target.value)}>
-                {PAPEIS.map((x) => <option key={x.valor} value={x.valor}>{x.rotulo}</option>)}
-              </select>
-              <button
-                onClick={() => enviar({ papel }, "Papel atualizado.")}
-                disabled={salvando || papel === p.papel}
-                style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #C4CCDA", background: "#fff", fontSize: 13, fontWeight: 600, cursor: papel === p.papel ? "default" : "pointer", opacity: papel === p.papel ? 0.5 : 1, whiteSpace: "nowrap" }}
+        <>
+          <div className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+            <Campo rotulo="Papel">
+              <div className="flex gap-2">
+                <Select value={papel} onChange={(e) => setPapel(e.target.value)}>
+                  {PAPEIS.map((x) => (
+                    <option key={x.valor} value={x.valor}>
+                      {x.rotulo}
+                    </option>
+                  ))}
+                </Select>
+                <Botao
+                  className="shrink-0"
+                  onClick={() => enviar({ papel }, "Papel atualizado.")}
+                  disabled={salvando || papel === p.papel}
+                >
+                  Salvar
+                </Botao>
+              </div>
+            </Campo>
+
+            <Campo rotulo="Senha">
+              {adminDisponivel ? (
+                <div className="flex gap-2">
+                  <Input
+                    value={senha}
+                    minLength={8}
+                    disabled={!p.user_id}
+                    onChange={(e) => setSenha(e.target.value)}
+                    placeholder={p.user_id ? "mínimo 8 caracteres" : "não tem login ainda"}
+                  />
+                  <Botao
+                    className="shrink-0"
+                    onClick={() => enviar({ senha }, "Senha trocada. Passe para a pessoa.")}
+                    disabled={salvando || senha.length < 8}
+                  >
+                    Trocar
+                  </Botao>
+                </div>
+              ) : (
+                <p className="pt-1 text-[12.5px] leading-relaxed text-slate-600">
+                  No Supabase: <b>Authentication</b> → o usuário
+                  {email ? (
+                    <>
+                      {" "}
+                      <code>{email}</code>
+                    </>
+                  ) : null}{" "}
+                  → <b>Reset password</b>.
+                </p>
+              )}
+            </Campo>
+
+            <div className="flex items-end">
+              <Botao
+                variante={p.ativo ? "perigo" : "secundario"}
+                className={cx("w-full", !p.ativo && "text-emerald-700 ring-emerald-200")}
+                onClick={() =>
+                  enviar(
+                    { ativo: !p.ativo },
+                    p.ativo ? "Desligado: não entra mais no app." : "Reativado.",
+                  )
+                }
+                disabled={salvando}
               >
-                Salvar
-              </button>
+                {p.ativo ? "Desligar da equipe" : "Reativar"}
+              </Botao>
             </div>
           </div>
 
-          <div>
-            <label style={lbl}>Senha</label>
-            {adminDisponivel ? (
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  style={input} value={senha} minLength={8} disabled={!p.user_id}
-                  onChange={(e) => setSenha(e.target.value)}
-                  placeholder={p.user_id ? "mínimo 8 caracteres" : "não tem login ainda"}
-                />
-                <button
-                  onClick={() => enviar({ senha }, "Senha trocada. Passe para a pessoa.")}
-                  disabled={salvando || senha.length < 8}
-                  style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #C4CCDA", background: "#fff", fontSize: 13, fontWeight: 600, cursor: senha.length < 8 ? "default" : "pointer", opacity: senha.length < 8 ? 0.5 : 1, whiteSpace: "nowrap" }}
-                >
-                  Trocar
-                </button>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12.5, color: "#53607A", lineHeight: 1.5, paddingTop: 4 }}>
-                No Supabase: <b>Authentication</b> → o usuário{email ? <> <code>{email}</code></> : null} →{" "}
-                <b>Reset password</b>.
-              </div>
+          <p className="mt-3 text-[11.5px] leading-relaxed text-slate-400">
+            Desligar tira a pessoa das listas do app e o histórico dela — roteiros, checklists,
+            ocorrências — continua todo lá, com o nome.
+            {!adminDisponivel && p.user_id && (
+              <>
+                {" "}
+                Para ela parar de <b>entrar</b>, bloqueie o login no Supabase: <b>Authentication</b> →
+                o usuário → <b>Ban user</b>.
+              </>
             )}
-          </div>
-
-          <div style={{ display: "flex", alignItems: "flex-end" }}>
-            <button
-              onClick={() =>
-                enviar({ ativo: !p.ativo }, p.ativo ? "Desligado: não entra mais no app." : "Reativado.")
-              }
-              disabled={salvando}
-              style={{ width: "100%", padding: "9px 14px", borderRadius: 8, border: `1px solid ${p.ativo ? "#E9B7BC" : "#B6DECB"}`, background: "#fff", color: p.ativo ? "#C0392B" : "#146848", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-            >
-              {p.ativo ? "Desligar da equipe" : "Reativar"}
-            </button>
-          </div>
-        </div>
+          </p>
+        </>
       )}
-
-      {aberto && (
-        <p style={{ fontSize: 11.5, color: "#8591A5", marginTop: 12, lineHeight: 1.5 }}>
-          Desligar tira a pessoa das listas do app e o histórico dela — roteiros,
-          checklists, ocorrências — continua todo lá, com o nome.
-          {!adminDisponivel && p.user_id && (
-            <> Para ela parar de <b>entrar</b>, bloqueie o login no Supabase:{" "}
-              <b>Authentication</b> → o usuário → <b>Ban user</b>.</>
-          )}
-        </p>
-      )}
-    </div>
+    </Cartao>
   );
 }

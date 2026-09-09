@@ -1,8 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { diaDe, diaISO, intervaloUTC } from "@/lib/frota/tempo";
+import {
+  Aviso,
+  Badge,
+  Botao,
+  Campo,
+  Cartao,
+  Carregando,
+  Contador,
+  Input,
+  Pagina,
+  cx,
+} from "@/components/ui";
 import {
   combustivelPorVeiculo, contar, contasManutencao, kmPorDia, kmPorMes,
   kmPorVeiculo, manutencaoPorVeiculo, porTecnico,
@@ -66,12 +79,18 @@ function one<T>(rel: T | T[] | null): T | null {
   return Array.isArray(rel) ? (rel[0] ?? null) : rel;
 }
 
-export default function RelatoriosPage() {
-  const hoje = diaISO(new Date());
-  const inicioDoMes = hoje.slice(0, 8) + "01";
+// Fora do componente: `new Date()` é impuro e não pode ser chamado no corpo de
+// um componente. Estas duas só alimentam o valor inicial dos filtros.
+function hojeISO() {
+  return diaISO(new Date());
+}
+function inicioDoMes() {
+  return hojeISO().slice(0, 8) + "01";
+}
 
-  const [de, setDe] = useState(inicioDoMes);
-  const [ate, setAte] = useState(hoje);
+export default function RelatoriosPage() {
+  const [de, setDe] = useState(() => inicioDoMes());
+  const [ate, setAte] = useState(() => hojeISO());
   const [aba, setAba] = useState<Aba>("combustivel");
 
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
@@ -130,12 +149,14 @@ export default function RelatoriosPage() {
   }, [de, ate]);
 
   useEffect(() => {
-    buscar();
+    (async () => {
+      await buscar();
+    })();
   }, [buscar]);
 
   function atalho(dias: number) {
     setDe(diaISO(new Date(Date.now() - dias * 86400000)));
-    setAte(hoje);
+    setAte(hojeISO());
   }
   function mesPassado() {
     const d = new Date();
@@ -149,113 +170,127 @@ export default function RelatoriosPage() {
   const sufixo = `${de}-a-${ate}`;
 
   return (
-    <div className="app">
-      <style>{CSS}</style>
-
-      <header className="topbar">
-        <div className="topbar-in">
-          <div className="brand">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="logo-h" src="/logowhite.png" alt="Grupo Nova Opção" />
-          </div>
-          <div className="spacer" />
-          <div className="top-meta">
-            <div className="d">Relatórios</div>
-            <div className="s">{periodo}</div>
-          </div>
-          <a className="sair" href="/">← Painel</a>
-          <form action="/auth/signout" method="post">
-            <button className="sair" type="submit">Sair</button>
-          </form>
-        </div>
-      </header>
-
-      <nav className="subnav">
-        <div className="subnav-in">
+    <Pagina
+      titulo="Relatórios"
+      subtitulo={periodo}
+      acoes={
+        <div className="rolagem-fina flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-200/70 p-1 print:hidden">
           {ABAS.map(([k, rotulo]) => (
-            <button key={k} className={aba === k ? "navtab on" : "navtab"} onClick={() => setAba(k)}>
+            <button
+              key={k}
+              onClick={() => setAba(k)}
+              className={cx(
+                "whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-semibold transition",
+                aba === k ? "bg-white text-brand-700 shadow-sm" : "text-slate-600 hover:text-slate-900",
+              )}
+            >
               {rotulo}
             </button>
           ))}
         </div>
-      </nav>
-
-      <main className="wrap">
-        <section className="filtros no-print">
-          <div className="campo">
-            <label htmlFor="de">De</label>
-            <input id="de" type="date" value={de} onChange={(e) => setDe(e.target.value)} />
+      }
+    >
+      <Cartao className="mb-5 p-3.5 print:hidden">
+        <div className="flex flex-wrap items-end gap-2.5">
+          <Campo rotulo="De" className="min-w-[145px]">
+            <Input type="date" value={de} onChange={(e) => setDe(e.target.value)} />
+          </Campo>
+          <Campo rotulo="Até" className="min-w-[145px]">
+            <Input type="date" value={ate} onChange={(e) => setAte(e.target.value)} />
+          </Campo>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip onClick={() => { setDe(inicioDoMes()); setAte(hojeISO()); }}>Este mês</Chip>
+            <Chip onClick={mesPassado}>Mês passado</Chip>
+            <Chip onClick={() => atalho(30)}>30 dias</Chip>
+            <Chip onClick={() => atalho(90)}>90 dias</Chip>
           </div>
-          <div className="campo">
-            <label htmlFor="ate">Até</label>
-            <input id="ate" type="date" value={ate} onChange={(e) => setAte(e.target.value)} />
-          </div>
-          <div className="atalhos">
-            <button className="chip" onClick={() => { setDe(inicioDoMes); setAte(hoje); }}>Este mês</button>
-            <button className="chip" onClick={mesPassado}>Mês passado</button>
-            <button className="chip" onClick={() => atalho(30)}>30 dias</button>
-            <button className="chip" onClick={() => atalho(90)}>90 dias</button>
-          </div>
-          <button className="btn" onClick={() => window.print()}>🖨 Imprimir / PDF</button>
-        </section>
+          <Botao className="ml-auto" onClick={() => window.print()}>
+            <Printer size={14} />
+            Imprimir / PDF
+          </Botao>
+        </div>
+      </Cartao>
 
-        <div className="periodo-print">Período: {periodo}</div>
+      {/* Só no papel: a folha impressa precisa dizer de que período ela é. */}
+      <div className="mb-3.5 hidden text-[12px] text-slate-500 print:block">Período: {periodo}</div>
 
-        {erro && <div className="aviso-erro">{erro}</div>}
-        {carregando ? (
-          <div className="panel"><div className="empty">Carregando o período…</div></div>
-        ) : (
-          <>
-            {aba === "combustivel" && <Combustivel {...{ roteiros, veiculos, sufixo, periodo }} />}
-            {aba === "km" && <KmRodado {...{ roteiros, sufixo, periodo }} />}
-            {aba === "tecnicos" && <Tecnicos {...{ roteiros, sufixo, periodo }} />}
-            {aba === "manutencoes" && <Manutencoes {...{ manutencoes, sufixo, periodo }} />}
-            {aba === "ocorrencias" && <Ocorrencias {...{ ocorrencias, sufixo, periodo }} />}
-          </>
-        )}
-      </main>
-    </div>
+      {erro && <Aviso>{erro}</Aviso>}
+      {carregando ? (
+        <Cartao>
+          <Carregando texto="Carregando o período…" />
+        </Cartao>
+      ) : (
+        <>
+          {aba === "combustivel" && <Combustivel {...{ roteiros, veiculos, sufixo, periodo }} />}
+          {aba === "km" && <KmRodado {...{ roteiros, sufixo, periodo }} />}
+          {aba === "tecnicos" && <Tecnicos {...{ roteiros, sufixo, periodo }} />}
+          {aba === "manutencoes" && <Manutencoes {...{ manutencoes, sufixo, periodo }} />}
+          {aba === "ocorrencias" && <Ocorrencias {...{ ocorrencias, sufixo, periodo }} />}
+        </>
+      )}
+    </Pagina>
   );
 }
 
 /* ------------------------------ peças comuns ------------------------------ */
-function Kpi({ lbl, val, sub, tom }: { lbl: string; val: string; sub: string; tom?: string | null }) {
+function Chip({ children, onClick, ativo }: { children: React.ReactNode; onClick(): void; ativo?: boolean }) {
   return (
-    <div className="kpi">
-      <div className="lbl">{lbl}</div>
-      <div className={"val mono" + (tom ? " " + tom : "")}>{val}</div>
-      <div className="sub">{sub}</div>
-    </div>
+    <button
+      onClick={onClick}
+      className={cx(
+        "rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition",
+        ativo
+          ? "bg-brand-700 text-white ring-brand-700"
+          : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50",
+      )}
+    >
+      {children}
+    </button>
   );
+}
+
+function Kpi({ lbl, val, sub, tom }: { lbl: string; val: string; sub: string; tom?: string | null }) {
+  const cor = tom === "warn" ? "text-amber-600" : tom === "crit" ? "text-red-600" : "text-slate-900";
+  return <Contador rotulo={lbl} valor={val} legenda={sub} tom={cor} />;
 }
 
 function Cabeca({ titulo, dica, onCSV }: { titulo: string; dica: string; onCSV: () => void }) {
   return (
-    <div className="board-head">
-      <h2>{titulo}</h2>
-      <span className="hint">{dica}</span>
-      <button className="btn ml-auto no-print" onClick={onCSV}>↧ CSV</button>
+    <div className="mb-3 flex flex-wrap items-center gap-3">
+      <h2 className="text-[15px] font-semibold text-slate-900">{titulo}</h2>
+      <span className="text-[12px] text-slate-500">{dica}</span>
+      <Botao className="ml-auto print:hidden" onClick={onCSV}>
+        <Download size={14} />
+        CSV
+      </Botao>
     </div>
   );
 }
 
+/** Trilho da barra: uma medida só, uma cor só — o azul da marca. */
 function Barra({ rotulo, sub, valor, texto, max }: {
   rotulo: React.ReactNode; sub?: string; valor: number; texto: string; max: number;
 }) {
   return (
-    <div className="barra">
-      <div className="barra-top">
+    <div className="border-t border-slate-100 py-3 first:border-t-0">
+      <div className="mb-1.5 flex flex-wrap items-center gap-2">
         {rotulo}
-        {sub && <span className="mute-xs">{sub}</span>}
-        <span className="mono forte ml-auto">{texto}</span>
+        {sub && <span className="text-[12px] text-slate-500">{sub}</span>}
+        <span className="ml-auto font-semibold tabular-nums text-slate-900">{texto}</span>
       </div>
-      <div className="trilho"><div className="fill" style={{ width: (100 * valor / max) + "%" }} /></div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200">
+        <div className="h-full rounded-full bg-brand-600" style={{ width: (100 * valor / max) + "%" }} />
+      </div>
     </div>
   );
 }
 
-function Vazio({ o_que }: { o_que: string }) {
-  return <div className="panel"><div className="empty">Nenhuma {o_que} no período escolhido.</div></div>;
+function SemDados({ o_que }: { o_que: string }) {
+  return (
+    <Cartao className="px-4 py-8 text-center text-[13px] text-slate-500">
+      Nenhuma {o_que} no período escolhido.
+    </Cartao>
+  );
 }
 
 /* ----------------------------- 1. combustível ----------------------------- */
@@ -268,11 +303,11 @@ function Combustivel({ roteiros, veiculos, sufixo, periodo }: {
   const litros = linhas.reduce((s, l) => s + (l.litros ?? 0), 0);
   const max = Math.max(1, ...linhas.map((l) => l.custo));
 
-  if (linhas.length === 0) return <Vazio o_que="rodagem" />;
+  if (linhas.length === 0) return <SemDados o_que="rodagem" />;
 
   return (
     <>
-      <section className="kpis kpis-4">
+      <section className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Kpi lbl="Custo de combustível" val={brl(custo)} sub={periodo} />
         <Kpi lbl="Km rodado" val={km(kmTotal)} sub="frota inteira" />
         <Kpi lbl="Custo médio" val={"R$ " + (custo / (kmTotal || 1)).toFixed(2)} sub="por km" />
@@ -289,37 +324,37 @@ function Combustivel({ roteiros, veiculos, sufixo, periodo }: {
             l.litros != null ? l.litros.toFixed(1) : ""]))}
       />
 
-      <section className="panel">
+      <section className="mb-5 rounded-xl bg-white px-4 shadow-sm ring-1 ring-slate-200">
         {linhas.map((l) => (
           <Barra
             key={l.placa}
-            rotulo={<span className="plate">{l.placa}</span>}
+            rotulo={<span className="placa">{l.placa}</span>}
             sub={l.modelo}
             valor={l.custo}
             texto={brl(l.custo)}
             max={max}
           />
         ))}
-        <div className="rodape-tabela">
+        <div className="mt-1.5">
           {linhas.map((l) => (
-            <div key={l.placa} className="linha">
-              <span className="plate">{l.placa}</span>
-              <span className="mute-xs">{l.roteiros} roteiro(s)</span>
-              <span className="mono ml-auto">{km(l.km)}</span>
-              <span className="mono">{l.litros != null ? nf.format(Math.round(l.litros)) + " L" : "s/ consumo"}</span>
-              <span className="mono forte">{brl(l.custo)}</span>
+            <div key={l.placa} className="flex flex-wrap items-center gap-3 border-t border-slate-100 py-2.5 text-[13px] first:border-t-0">
+              <span className="placa">{l.placa}</span>
+              <span className="text-[12px] text-slate-500">{l.roteiros} roteiro(s)</span>
+              <span className="ml-auto tabular-nums">{km(l.km)}</span>
+              <span className="tabular-nums">{l.litros != null ? nf.format(Math.round(l.litros)) + " L" : "s/ consumo"}</span>
+              <span className="font-semibold tabular-nums text-slate-900">{brl(l.custo)}</span>
             </div>
           ))}
-          <div className="linha total">
-            <span className="forte">Total</span>
-            <span className="mono ml-auto">{km(kmTotal)}</span>
-            <span className="mono">{litros ? nf.format(Math.round(litros)) + " L" : "—"}</span>
-            <span className="mono forte">{brl(custo)}</span>
+          <div className="flex flex-wrap items-center gap-3 border-t-2 border-slate-300 py-2.5 text-[13px] font-semibold text-slate-900">
+            <span className="font-semibold text-slate-900">Total</span>
+            <span className="ml-auto tabular-nums">{km(kmTotal)}</span>
+            <span className="tabular-nums">{litros ? nf.format(Math.round(litros)) + " L" : "—"}</span>
+            <span className="font-semibold tabular-nums text-slate-900">{brl(custo)}</span>
           </div>
         </div>
       </section>
 
-      <div className="legend">
+      <div className="mb-5 text-center text-[12px] leading-relaxed text-slate-400">
         Custo estimado: km rodado × o custo por km do cadastro do veículo (preço do
         combustível ÷ consumo). Não é nota de posto — para custo real seria preciso
         registrar abastecimento.
@@ -342,11 +377,11 @@ function KmRodado({ roteiros, sufixo, periodo }: { roteiros: Roteiro[]; sufixo: 
   const nRoteiros = porVeic.reduce((s, l) => s + l.roteiros, 0);
   const max = Math.max(1, ...lista.map((l) => l.km));
 
-  if (lista.length === 0) return <Vazio o_que="rodagem" />;
+  if (lista.length === 0) return <SemDados o_que="rodagem" />;
 
   return (
     <>
-      <section className="kpis kpis-4">
+      <section className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Kpi lbl="Km no período" val={km(kmTotal)} sub={periodo} />
         <Kpi lbl="Roteiros fechados" val={String(nRoteiros)} sub="com km lançado" />
         <Kpi lbl="Média por roteiro" val={km(kmTotal / (nRoteiros || 1))} sub="frota inteira" />
@@ -361,22 +396,22 @@ function KmRodado({ roteiros, sufixo, periodo }: { roteiros: Roteiro[]; sufixo: 
           lista.map((l) => [l.chave, l.km, l.roteiros, l.custo.toFixed(2)]))}
       />
 
-      <div className="chips no-print">
+      <div className="mb-3 flex flex-wrap gap-1.5 print:hidden">
         {(["dia", "mes", "veiculo"] as const).map((c) => (
-          <button key={c} className={corte === c ? "chip on" : "chip"} onClick={() => setCorte(c)}>
+          <Chip key={c} ativo={corte === c} onClick={() => setCorte(c)}>
             {c === "dia" ? "Por dia" : c === "mes" ? "Por mês" : "Por veículo"}
-          </button>
+          </Chip>
         ))}
       </div>
 
-      <section className="panel">
+      <section className="mb-5 rounded-xl bg-white px-4 shadow-sm ring-1 ring-slate-200">
         {lista.map((l) => (
           <Barra
             key={l.chave}
             rotulo={
               corte === "veiculo"
-                ? <span className="plate">{l.chave}</span>
-                : <span className="forte mono">{rotuloDe(l.chave)}</span>
+                ? <span className="placa">{l.chave}</span>
+                : <span className="font-semibold tabular-nums text-slate-900">{rotuloDe(l.chave)}</span>
             }
             sub={`${l.roteiros} roteiro(s)`}
             valor={l.km}
@@ -384,10 +419,10 @@ function KmRodado({ roteiros, sufixo, periodo }: { roteiros: Roteiro[]; sufixo: 
             max={max}
           />
         ))}
-        <div className="linha total">
-          <span className="forte">Total do período</span>
-          <span className="mono ml-auto">{nRoteiros} roteiro(s)</span>
-          <span className="mono forte">{km(kmTotal)}</span>
+        <div className="flex flex-wrap items-center gap-3 border-t-2 border-slate-300 py-2.5 text-[13px] font-semibold text-slate-900">
+          <span className="font-semibold text-slate-900">Total do período</span>
+          <span className="ml-auto tabular-nums">{nRoteiros} roteiro(s)</span>
+          <span className="font-semibold tabular-nums text-slate-900">{km(kmTotal)}</span>
         </div>
       </section>
     </>
@@ -401,11 +436,11 @@ function Tecnicos({ roteiros, sufixo, periodo }: { roteiros: Roteiro[]; sufixo: 
   const totalRot = linhas.reduce((s, l) => s + l.roteiros, 0);
   const totalKm = linhas.reduce((s, l) => s + l.km, 0);
 
-  if (linhas.length === 0) return <Vazio o_que="saída" />;
+  if (linhas.length === 0) return <SemDados o_que="saída" />;
 
   return (
     <>
-      <section className="kpis kpis-3">
+      <section className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-3">
         <Kpi lbl="Deslocamentos" val={String(totalRot)} sub={periodo} />
         <Kpi lbl="Técnicos que saíram" val={String(linhas.length)} sub="no período" />
         <Kpi lbl="Km da equipe" val={km(totalKm)} sub="só roteiros fechados" />
@@ -420,18 +455,18 @@ function Tecnicos({ roteiros, sufixo, periodo }: { roteiros: Roteiro[]; sufixo: 
             Math.round(l.km / (l.roteiros - l.emAberto || 1)), horas(l.minutos), l.emAberto]))}
       />
 
-      <section className="panel">
+      <section className="mb-5 rounded-xl bg-white px-4 shadow-sm ring-1 ring-slate-200">
         {linhas.map((l) => {
           const fechados = l.roteiros - l.emAberto;
           return (
-            <div key={l.tecnico} className="barra">
-              <div className="barra-top">
-                <span className="forte">{l.tecnico}</span>
-                {l.emAberto > 0 && <span className="tag warn">{l.emAberto} sem chegada</span>}
-                <span className="mono forte ml-auto">{l.roteiros} roteiro(s)</span>
+            <div key={l.tecnico} className="border-t border-slate-100 py-3 first:border-t-0">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-900">{l.tecnico}</span>
+                {l.emAberto > 0 && <Badge tom="atencao">{l.emAberto} sem chegada</Badge>}
+                <span className="ml-auto font-semibold tabular-nums text-slate-900">{l.roteiros} roteiro(s)</span>
               </div>
-              <div className="trilho"><div className="fill" style={{ width: (100 * l.roteiros / max) + "%" }} /></div>
-              <div className="mute-xs">
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200"><div className="h-full rounded-full bg-brand-600" style={{ width: (100 * l.roteiros / max) + "%" }} /></div>
+              <div className="text-[12px] text-slate-500">
                 {km(l.km)} · {horas(l.minutos)} fora · {l.dias} dia(s) com saída
                 {fechados > 0 ? ` · média ${km(l.km / fechados)}/roteiro` : ""}
               </div>
@@ -453,11 +488,11 @@ function Manutencoes({ manutencoes, sufixo, periodo }: {
   const porOrigem = useMemo(() => contar(manutencoes, (m) => m.origem), [manutencoes]);
   const max = Math.max(1, ...porVeiculo.map((l) => l.gasto));
 
-  if (manutencoes.length === 0) return <Vazio o_que="manutenção aberta" />;
+  if (manutencoes.length === 0) return <SemDados o_que="manutenção aberta" />;
 
   return (
     <>
-      <section className="kpis kpis-4">
+      <section className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Kpi lbl="Gasto" val={brl(total.gasto)} sub={periodo} />
         <Kpi lbl="Previsto em aberto" val={brl(total.previsto)} sub="orçado, ainda na oficina" tom={total.previsto > 0 ? "warn" : null} />
         <Kpi lbl="Ordens abertas" val={String(total.abertas)} sub={`de ${total.ordens} no período`} tom={total.abertas > 0 ? "warn" : null} />
@@ -476,16 +511,16 @@ function Manutencoes({ manutencoes, sufixo, periodo }: {
             m.orcamento?.toFixed(2) ?? "", m.valor_final?.toFixed(2) ?? "", m.concluida_em ?? ""]))}
       />
 
-      <section className="panel">
+      <section className="mb-5 rounded-xl bg-white px-4 shadow-sm ring-1 ring-slate-200">
         {porVeiculo.map((l) => (
-          <div key={l.placa} className="barra">
-            <div className="barra-top">
-              <span className="plate">{l.placa}</span>
-              <span className="mute-xs">{l.modelo}</span>
-              <span className="mono forte ml-auto">{brl(l.gasto)}</span>
+          <div key={l.placa} className="border-t border-slate-100 py-3 first:border-t-0">
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+              <span className="placa">{l.placa}</span>
+              <span className="text-[12px] text-slate-500">{l.modelo}</span>
+              <span className="ml-auto font-semibold tabular-nums text-slate-900">{brl(l.gasto)}</span>
             </div>
-            <div className="trilho"><div className="fill" style={{ width: (100 * l.gasto / max) + "%" }} /></div>
-            <div className="mute-xs">
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200"><div className="h-full rounded-full bg-brand-600" style={{ width: (100 * l.gasto / max) + "%" }} /></div>
+            <div className="text-[12px] text-slate-500">
               {l.ordens} ordem(ns)
               {l.abertas > 0 ? ` · ${l.abertas} em aberto` : ""}
               {l.previsto > 0 ? ` · previsto ${brl(l.previsto)}` : ""}
@@ -494,7 +529,7 @@ function Manutencoes({ manutencoes, sufixo, periodo }: {
         ))}
       </section>
 
-      <div className="duas">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Contagem titulo="Por tipo" linhas={porTipo} />
         <Contagem titulo="Por origem" linhas={porOrigem} />
       </div>
@@ -514,11 +549,11 @@ function Ocorrencias({ ocorrencias, sufixo, periodo }: {
   const comTerceiros = ocorrencias.filter((o) => o.terceiros).length;
   const max = Math.max(1, ...porVeiculo.map((l) => l.n));
 
-  if (ocorrencias.length === 0) return <Vazio o_que="ocorrência" />;
+  if (ocorrencias.length === 0) return <SemDados o_que="ocorrência" />;
 
   return (
     <>
-      <section className="kpis kpis-4">
+      <section className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Kpi lbl="Ocorrências" val={String(ocorrencias.length)} sub={periodo} />
         <Kpi lbl="Em aberto" val={String(abertas)} sub="ainda sem desfecho" tom={abertas > 0 ? "warn" : null} />
         <Kpi lbl="Graves" val={String(graves)} sub="no período" tom={graves > 0 ? "crit" : null} />
@@ -535,11 +570,11 @@ function Ocorrencias({ ocorrencias, sufixo, periodo }: {
             o.terceiros ? "sim" : "não", o.local ?? "", o.descricao, o.status, o.resolvida_em ?? ""]))}
       />
 
-      <section className="panel">
+      <section className="mb-5 rounded-xl bg-white px-4 shadow-sm ring-1 ring-slate-200">
         {porVeiculo.map((l) => (
           <Barra
             key={l.chave}
-            rotulo={<span className="plate">{l.chave}</span>}
+            rotulo={<span className="placa">{l.chave}</span>}
             valor={l.n}
             texto={`${l.n} ocorrência(s)`}
             max={max}
@@ -547,26 +582,26 @@ function Ocorrencias({ ocorrencias, sufixo, periodo }: {
         ))}
       </section>
 
-      <div className="duas">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Contagem titulo="Por tipo" linhas={porTipo} />
         <Contagem titulo="Por gravidade" linhas={porGravidade} />
       </div>
 
-      <div className="board-head"><h2>Uma a uma</h2></div>
-      <section className="panel">
+      <h2 className="mb-3 text-[15px] font-semibold text-slate-900">Uma a uma</h2>
+      <section className="mb-5 rounded-xl bg-white px-4 shadow-sm ring-1 ring-slate-200">
         {[...ocorrencias].sort((a, b) => b.data.localeCompare(a.data)).map((o) => (
-          <div key={o.id} className="ocorr">
-            <div className="barra-top">
-              <span className="mono forte">{dataBR(o.data)}</span>
-              <span className="plate">{o.placa}</span>
-              <span className={"tag " + (o.gravidade === "GRAVE" ? "crit" : o.gravidade === "MODERADA" ? "warn" : "mute")}>
+          <div key={o.id} className="border-t border-slate-100 py-3 first:border-t-0">
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+              <span className="font-semibold tabular-nums text-slate-900">{dataBR(o.data)}</span>
+              <span className="placa">{o.placa}</span>
+              <Badge tom={o.gravidade === "GRAVE" ? "critico" : o.gravidade === "MODERADA" ? "atencao" : "mudo"}>
                 {o.gravidade}
-              </span>
-              <span className="mute-xs">{o.tipo}</span>
-              <span className="tag mute ml-auto">{o.status}</span>
+              </Badge>
+              <span className="text-[12px] text-slate-500">{o.tipo}</span>
+              <Badge className="ml-auto">{o.status}</Badge>
             </div>
-            <div className="ocorr-desc">{o.descricao}</div>
-            <div className="mute-xs">
+            <div className="my-1 text-[13.5px] leading-relaxed text-slate-800">{o.descricao}</div>
+            <div className="text-[12px] text-slate-500">
               {o.tecnico}
               {o.local ? " · " + o.local : ""}
               {o.terceiros ? " · com terceiros" : ""}
@@ -582,122 +617,15 @@ function Ocorrencias({ ocorrencias, sufixo, periodo }: {
 function Contagem({ titulo, linhas }: { titulo: string; linhas: { chave: string; n: number }[] }) {
   const total = linhas.reduce((s, l) => s + l.n, 0) || 1;
   return (
-    <section className="panel">
-      <div className="mini-head">{titulo}</div>
+    <section className="mb-5 rounded-xl bg-white px-4 pb-1 shadow-sm ring-1 ring-slate-200">
+      <div className="pb-0.5 pt-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">{titulo}</div>
       {linhas.map((l) => (
-        <div key={l.chave} className="linha">
+        <div key={l.chave} className="flex flex-wrap items-center gap-3 border-t border-slate-100 py-2.5 text-[13px] first:border-t-0">
           <span>{l.chave}</span>
-          <span className="mono ml-auto">{l.n}</span>
-          <span className="mute-xs">{Math.round(100 * l.n / total)}%</span>
+          <span className="ml-auto tabular-nums">{l.n}</span>
+          <span className="text-[12px] text-slate-500">{Math.round(100 * l.n / total)}%</span>
         </div>
       ))}
     </section>
   );
 }
-
-/* ================================== CSS ================================== */
-const CSS = `
-.app{--bg:#EBEEF4;--surface:#fff;--surface-2:#F4F6FB;--border:#DBE0EA;--border-strong:#C4CCDA;
-  --ink:#16233C;--ink-2:#53607A;--ink-3:#8591A5;--brand:#2B4C8C;--navy:#17263F;--navy-2:#223B63;
-  --silver:#AEB8C6;--ok:#1B9E6B;--ok-bg:#E5F4EE;--warn:#C08306;--warn-bg:#FAEFD6;--crit:#CE3A44;--crit-bg:#FAE5E7;
-  --shadow:0 1px 2px rgba(22,35,60,.06),0 8px 24px rgba(22,35,60,.05);
-  min-height:100vh;background:var(--bg);color:var(--ink);
-  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-.app .mono{font-variant-numeric:tabular-nums}
-.app button,.app input,.app select{font-family:inherit}
-.mute-xs{font-size:12px;color:var(--ink-2)}
-.forte{font-weight:650;color:var(--ink)}
-.ml-auto{margin-left:auto}
-
-.topbar{background:linear-gradient(180deg,var(--navy),var(--navy-2));color:#fff;position:sticky;top:0;z-index:10}
-.topbar-in{max-width:1240px;margin:0 auto;padding:13px 20px;display:flex;align-items:center;gap:12px}
-.logo-h{height:42px;display:block}
-@media(max-width:560px){.logo-h{height:34px}.top-meta{display:none}}
-.spacer{flex:1}
-.top-meta{text-align:right;line-height:1.3}
-.top-meta .d{font-size:13px;font-weight:600}
-.top-meta .s{font-size:11.5px;color:var(--silver)}
-.sair{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;
-  padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;white-space:nowrap}
-.sair:hover{background:rgba(255,255,255,.2)}
-
-.subnav{background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:68px;z-index:9}
-.subnav-in{max-width:1240px;margin:0 auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto}
-.navtab{padding:13px 14px;font-size:13px;font-weight:600;color:var(--ink-2);border:none;background:none;
-  border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
-.navtab.on{color:var(--brand);border-bottom-color:var(--brand)}
-
-.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 64px}
-
-.filtros{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);
-  padding:14px 16px;margin-bottom:20px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
-.campo{display:flex;flex-direction:column;gap:5px;min-width:145px}
-.campo label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
-.campo input{padding:9px 10px;border-radius:9px;border:1px solid var(--border-strong);font-size:14px;
-  background:var(--surface);color:var(--ink);box-sizing:border-box;width:100%}
-.atalhos,.chips{display:flex;gap:7px;flex-wrap:wrap}
-.chips{margin-bottom:12px}
-.chip{padding:8px 13px;border-radius:20px;border:1px solid var(--border-strong);background:var(--surface);
-  color:var(--ink-2);font-size:12.5px;font-weight:600;cursor:pointer}
-.chip.on{background:var(--brand);border-color:transparent;color:#fff}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;font-size:13.5px;
-  font-weight:600;cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
-
-.periodo-print{display:none}
-.aviso-erro{background:var(--crit-bg);border:1px solid #E9B7BC;color:#8E2129;border-radius:12px;
-  padding:14px 16px;font-size:13.5px;margin-bottom:16px}
-
-.kpis{display:grid;gap:14px;margin-bottom:22px}
-.kpis-4{grid-template-columns:repeat(4,1fr)}
-.kpis-3{grid-template-columns:repeat(3,1fr)}
-@media(max-width:840px){.kpis-4,.kpis-3{grid-template-columns:repeat(2,1fr)}}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow)}
-.kpi .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
-.kpi .val{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:7px;line-height:1}
-.kpi .val.warn{color:var(--warn)}
-.kpi .val.crit{color:var(--crit)}
-.kpi .sub{font-size:11.5px;color:var(--ink-2);margin-top:6px}
-
-.board-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-.board-head h2{font-size:15px;font-weight:650;margin:0}
-.board-head .hint{font-size:12px;color:var(--ink-3)}
-
-.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 16px;
-  box-shadow:var(--shadow);margin-bottom:20px}
-.empty{font-size:12.5px;color:var(--ink-3);padding:20px 4px;text-align:center}
-.legend{margin-top:4px;font-size:12px;color:var(--ink-3);text-align:center;line-height:1.5}
-
-.barra{padding:12px 0;border-top:1px solid var(--border)}
-.barra:first-child{border-top:none}
-.barra-top{display:flex;align-items:center;gap:9px;margin-bottom:6px;flex-wrap:wrap}
-.trilho{height:7px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:5px}
-.fill{height:100%;background:var(--brand)}
-.plate{font-weight:700;font-size:12px;letter-spacing:.04em;color:var(--ink);background:var(--surface-2);
-  border:1px solid var(--border-strong);border-radius:6px;padding:2px 7px}
-.tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 7px;border-radius:5px}
-.tag.warn{background:var(--warn-bg);color:var(--warn)}
-.tag.crit{background:var(--crit-bg);color:var(--crit)}
-.tag.mute{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--border)}
-
-.linha{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--border);font-size:13px}
-.linha.total{border-top:2px solid var(--border-strong);font-weight:650}
-.rodape-tabela{margin-top:6px}
-.mini-head{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);
-  font-weight:700;padding:12px 0 2px}
-.duas{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
-@media(max-width:720px){.duas{grid-template-columns:1fr}}
-
-.ocorr{padding:12px 0;border-top:1px solid var(--border)}
-.ocorr:first-child{border-top:none}
-.ocorr-desc{font-size:13.5px;margin:5px 0 3px;line-height:1.45}
-
-@media print{
-  .no-print,.topbar,.subnav,.chips{display:none!important}
-  .app{background:#fff}
-  .wrap{padding:0}
-  .periodo-print{display:block;font-size:12px;color:#53607A;margin-bottom:14px}
-  .panel,.kpi{box-shadow:none;break-inside:avoid}
-  @page{size:A4;margin:12mm}
-}
-@media(prefers-reduced-motion:reduce){.app *{transition:none!important}}
-`;

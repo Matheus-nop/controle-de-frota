@@ -2,7 +2,10 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowLeft, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/Logo";
+import { Botao, BotaoLink, Carregando } from "@/components/ui";
 
 // Ordem de serviço para imprimir e entregar ao técnico.
 //
@@ -11,6 +14,9 @@ import { createClient } from "@/lib/supabase/client";
 // o que o sistema já sabe (veículo, km, o que foi pedido) vem impresso, e o
 // que só vai existir na oficina (peças, valor, km de entrega) vem em branco,
 // com linha para escrever à mão.
+//
+// Fica FORA do route group `(app)`: a casca do app (topo colorido, abas, menu)
+// não tem o que fazer numa folha A4 que vai para a oficina.
 //
 // Nada aqui grava nada. Depois de executado, quem lança o resultado é o
 // gestor/PCM em /manutencao — é lá que o dado entra no banco. O papel é o
@@ -54,13 +60,15 @@ function numero(id: string) {
   return id.slice(0, 8).toUpperCase();
 }
 
-// Bloco com linha para preencher à mão na oficina.
-function Campo({ rotulo, largura = "1fr", linhas = 1 }: { rotulo: string; largura?: string; linhas?: number }) {
+const ROTULO = "text-[10px] font-bold uppercase tracking-[0.05em] text-slate-400";
+
+/** Bloco com linha para preencher à mão na oficina. */
+function ParaPreencher({ rotulo, largo, linhas = 1 }: { rotulo: string; largo?: boolean; linhas?: number }) {
   return (
-    <div style={{ gridColumn: `span ${largura === "1fr" ? 1 : 2}` }}>
-      <div className="rot">{rotulo}</div>
+    <div className={largo ? "col-span-2" : undefined}>
+      <div className={`${ROTULO} text-slate-500`}>{rotulo}</div>
       {Array.from({ length: linhas }).map((_, i) => (
-        <div key={i} className="linha-escrita" />
+        <div key={i} className="mt-1.5 h-[22px] border-b border-slate-400" />
       ))}
     </div>
   );
@@ -69,9 +77,20 @@ function Campo({ rotulo, largura = "1fr", linhas = 1 }: { rotulo: string; largur
 function Dado({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
     <div>
-      <div className="rot">{rotulo}</div>
-      <div className="val">{valor}</div>
+      <div className={ROTULO}>{rotulo}</div>
+      <div className="mt-0.5 text-sm font-semibold text-slate-900">{valor}</div>
     </div>
+  );
+}
+
+function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-[18px] break-inside-avoid">
+      <h2 className="mb-2 border-b border-slate-200 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+        {titulo}
+      </h2>
+      {children}
+    </section>
   );
 }
 
@@ -101,14 +120,18 @@ function Ordem() {
     })();
   }, [id]);
 
-  if (estado === "carregando") {
-    return <p style={{ padding: 24, color: "#53607A" }}>Carregando a ordem…</p>;
-  }
+  if (estado === "carregando") return <Carregando texto="Carregando a ordem…" />;
+
   if (!m) {
     return (
-      <div style={{ padding: 24 }}>
-        <p style={{ color: "#53607A" }}>Ordem de serviço não encontrada.</p>
-        <a href="/manutencao" style={{ color: "#2B4C8C" }}>← Voltar para Manutenções</a>
+      <div className="mx-auto max-w-[820px] p-6">
+        <p className="mb-3 text-sm text-slate-500">
+          {id ? "Ordem de serviço não encontrada." : "Nenhuma ordem indicada no endereço."}
+        </p>
+        <BotaoLink href="/manutencao">
+          <ArrowLeft size={14} />
+          Voltar para Manutenções
+        </BotaoLink>
       </div>
     );
   }
@@ -119,41 +142,47 @@ function Ordem() {
 
   return (
     <>
-      <style>{CSS}</style>
+      {/* A4 de verdade: margem de 14mm e a folha ocupando a página inteira. */}
+      <style>{`@media print { @page { size: A4; margin: 14mm } }`}</style>
 
-      <div className="barra">
-        <a href="/manutencao">← Manutenções</a>
-        <button onClick={() => window.print()}>🖨 Imprimir</button>
+      <div className="mx-auto flex max-w-[820px] items-center gap-3 px-5 pt-4 print:hidden">
+        <BotaoLink href="/manutencao">
+          <ArrowLeft size={14} />
+          Manutenções
+        </BotaoLink>
+        <Botao variante="primario" className="ml-auto" onClick={() => window.print()}>
+          <Printer size={14} />
+          Imprimir
+        </Botao>
       </div>
 
-      <div className="folha">
-        <header className="topo">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Grupo Nova Opção" className="logo" />
-          <div className="titulo">
-            <h1>Ordem de serviço {programada ? "— manutenção programada" : "— manutenção"}</h1>
-            <div className="sub">Controle de Frota · Grupo Nova Opção</div>
+      <div className="mx-auto my-4 mb-10 max-w-[820px] rounded-xl bg-white px-[30px] py-7 text-slate-900 ring-1 ring-slate-200 print:my-0 print:max-w-none print:rounded-none print:p-0 print:ring-0">
+        <header className="mb-[18px] flex items-start gap-[18px] border-b-2 border-slate-900 pb-3.5">
+          <Logo altura={38} />
+          <div>
+            <h1 className="text-base font-semibold tracking-tight">
+              Ordem de serviço {programada ? "— manutenção programada" : "— manutenção"}
+            </h1>
+            <div className="mt-0.5 text-[11.5px] text-slate-500">Frota · Grupo Nova Opção</div>
           </div>
-          <div className="numero">
-            <div className="rot">Ordem nº</div>
-            <div className="os">{numero(m.id)}</div>
-            <div className="rot">Aberta em {dataBR(m.aberta_em)}</div>
+          <div className="ml-auto text-right">
+            <div className={ROTULO}>Ordem nº</div>
+            <div className="text-[19px] font-bold tracking-[0.03em] tabular-nums">{numero(m.id)}</div>
+            <div className={ROTULO}>Aberta em {dataBR(m.aberta_em)}</div>
           </div>
         </header>
 
-        <section className="bloco">
-          <h2>Veículo</h2>
-          <div className="grade">
+        <Bloco titulo="Veículo">
+          <div className="grid grid-cols-4 gap-x-[18px] gap-y-3">
             <Dado rotulo="Placa" valor={v?.placa ?? "—"} />
             <Dado rotulo="Modelo" valor={v?.modelo ?? "—"} />
             <Dado rotulo="Ano" valor={v?.ano ?? "—"} />
             <Dado rotulo="Km na abertura" valor={nkm(m.km_abertura ?? v?.km_atual)} />
           </div>
-        </section>
+        </Bloco>
 
-        <section className="bloco">
-          <h2>A ordem</h2>
-          <div className="grade">
+        <Bloco titulo="A ordem">
+          <div className="grid grid-cols-4 gap-x-[18px] gap-y-3">
             <Dado rotulo="Tipo" valor={m.tipo ?? "—"} />
             <Dado rotulo="Origem" valor={m.origem ?? "—"} />
             <Dado rotulo="Prioridade" valor={m.prioridade ?? "—"} />
@@ -161,53 +190,47 @@ function Ordem() {
             <Dado rotulo="Oficina" valor={m.oficina ?? "a definir"} />
             <Dado rotulo="Solicitante" valor={resp?.nome ?? "—"} />
             <Dado rotulo="Orçamento aprovado" valor={brl(m.orcamento)} />
-            <Dado
-              rotulo="Próxima revisão"
-              valor={nkm(m.proxima_revisao_km ?? v?.proxima_revisao_km)}
-            />
+            <Dado rotulo="Próxima revisão" valor={nkm(m.proxima_revisao_km ?? v?.proxima_revisao_km)} />
           </div>
+        </Bloco>
+
+        <Bloco titulo="O que fazer">
+          <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed">{m.descricao_problema}</p>
+        </Bloco>
+
+        <Bloco titulo="Para a oficina preencher">
+          <div className="grid grid-cols-2 gap-x-[18px] gap-y-3">
+            <ParaPreencher rotulo="Serviços realizados" largo linhas={4} />
+            <ParaPreencher rotulo="Peças substituídas (descrição e quantidade)" largo linhas={4} />
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-x-[18px] gap-y-3">
+            <ParaPreencher rotulo="Entrada na oficina (data e hora)" />
+            <ParaPreencher rotulo="Saída da oficina (data e hora)" />
+            <ParaPreencher rotulo="Km na entrega" />
+            <ParaPreencher rotulo="Valor final (R$)" />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-x-[18px]">
+            <ParaPreencher rotulo="Pendências / o que ficou para a próxima" largo linhas={2} />
+          </div>
+        </Bloco>
+
+        <section className="mt-9 grid break-inside-avoid grid-cols-3 gap-6">
+          {[
+            "Responsável pela oficina",
+            "Técnico que entregou o veículo",
+            "Conferido por (PCM / gestor)",
+          ].map((quem) => (
+            <div key={quem}>
+              <div className="mb-1.5 border-t border-slate-900" />
+              <div className={ROTULO}>{quem}</div>
+            </div>
+          ))}
         </section>
 
-        <section className="bloco">
-          <h2>O que fazer</h2>
-          <p className="descricao">{m.descricao_problema}</p>
-        </section>
-
-        <section className="bloco preencher">
-          <h2>Para a oficina preencher</h2>
-          <div className="grade grade-2">
-            <Campo rotulo="Serviços realizados" largura="2fr" linhas={4} />
-            <Campo rotulo="Peças substituídas (descrição e quantidade)" largura="2fr" linhas={4} />
-          </div>
-          <div className="grade">
-            <Campo rotulo="Entrada na oficina (data e hora)" />
-            <Campo rotulo="Saída da oficina (data e hora)" />
-            <Campo rotulo="Km na entrega" />
-            <Campo rotulo="Valor final (R$)" />
-          </div>
-          <div className="grade grade-2">
-            <Campo rotulo="Pendências / o que ficou para a próxima" largura="2fr" linhas={2} />
-          </div>
-        </section>
-
-        <section className="assinaturas">
-          <div>
-            <div className="risco" />
-            <div className="rot">Responsável pela oficina</div>
-          </div>
-          <div>
-            <div className="risco" />
-            <div className="rot">Técnico que entregou o veículo</div>
-          </div>
-          <div>
-            <div className="risco" />
-            <div className="rot">Conferido por (PCM / gestor)</div>
-          </div>
-        </section>
-
-        <footer className="rodape">
-          Ordem {numero(m.id)} · {v?.placa ?? "—"} · impressa em {dataBR(new Date().toISOString().slice(0, 10))}.
-          Depois de executada, lance o resultado em Manutenções — o papel não atualiza o sistema.
+        <footer className="mt-6 border-t border-slate-200 pt-2.5 text-[10.5px] leading-relaxed text-slate-400">
+          Ordem {numero(m.id)} · {v?.placa ?? "—"} · impressa em{" "}
+          {dataBR(new Date().toISOString().slice(0, 10))}. Depois de executada, lance o resultado em
+          Manutenções — o papel não atualiza o sistema.
         </footer>
       </div>
     </>
@@ -217,47 +240,8 @@ function Ordem() {
 export default function OrdemPage() {
   // useSearchParams exige Suspense na build estática do App Router.
   return (
-    <Suspense fallback={<p style={{ padding: 24, color: "#53607A" }}>Carregando…</p>}>
+    <Suspense fallback={<Carregando />}>
       <Ordem />
     </Suspense>
   );
 }
-
-const CSS = `
-.barra{max-width:820px;margin:0 auto;padding:16px 20px 0;display:flex;align-items:center;gap:12px}
-.barra a{font-size:13px;color:#2B4C8C;text-decoration:none;font-weight:600}
-.barra button{margin-left:auto;padding:9px 16px;border-radius:9px;border:none;background:#2B4C8C;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer}
-
-.folha{max-width:820px;margin:16px auto 40px;background:#fff;border:1px solid #DBE0EA;border-radius:12px;padding:28px 30px;
-  color:#16233C;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
-
-.topo{display:flex;align-items:flex-start;gap:18px;border-bottom:2px solid #16233C;padding-bottom:14px;margin-bottom:18px}
-.logo{height:38px}
-.titulo h1{font-size:16px;margin:0;letter-spacing:-.01em}
-.titulo .sub{font-size:11.5px;color:#53607A;margin-top:3px}
-.numero{margin-left:auto;text-align:right}
-.numero .os{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.03em}
-
-.bloco{margin-bottom:18px;break-inside:avoid}
-.bloco h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#53607A;margin:0 0 9px;
-  border-bottom:1px solid #DBE0EA;padding-bottom:5px}
-.grade{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 18px}
-.grade-2{grid-template-columns:repeat(2,1fr)}
-.rot{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#8591A5;font-weight:700}
-.val{font-size:14px;font-weight:600;margin-top:2px}
-.descricao{font-size:14.5px;line-height:1.55;margin:0;white-space:pre-wrap}
-
-.preencher .rot{color:#53607A}
-.linha-escrita{border-bottom:1px solid #AEB8C6;height:22px;margin-top:6px}
-
-.assinaturas{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:34px;break-inside:avoid}
-.risco{border-top:1px solid #16233C;margin-bottom:5px}
-.rodape{margin-top:22px;padding-top:10px;border-top:1px solid #DBE0EA;font-size:10.5px;color:#8591A5;line-height:1.5}
-
-@media print{
-  .barra{display:none}
-  body{background:#fff}
-  .folha{max-width:none;margin:0;border:none;border-radius:0;padding:0}
-  @page{size:A4;margin:14mm}
-}
-`;
