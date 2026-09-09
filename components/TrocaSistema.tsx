@@ -23,18 +23,50 @@ import { useEffect, useRef, useState } from "react";
 
 const AQUI = "frota";
 
+/**
+ * Só entra no menu quem tem endereço http(s) de verdade.
+ *
+ * Isto nasceu de um caso real: a variável foi preenchida com o texto de
+ * exemplo — `https://<endereço do roteiros>` — e o app renderizou um link com
+ * `<`, `>` e espaços dentro do host. O Chrome se recusa a navegar para isso e
+ * mostra `about:blank#blocked`, uma mensagem que não diz uma palavra sobre
+ * configuração e manda a pessoa caçar defeito no lugar errado.
+ *
+ * Endereço sem esquema (`estoque.exemplo.com.br`) ganha `https://`, que é o
+ * engano honesto de quem copia da barra do navegador. Qualquer outra coisa
+ * vira `undefined` e o item some do menu — item que sumiu faz olhar a
+ * variável; link que não vai a lugar nenhum não faz olhar nada.
+ */
+export function enderecoDeSistema(bruto: string | undefined): string | undefined {
+  const v = bruto?.trim();
+  if (!v) return undefined;
+
+  // O `https://` só entra quando NÃO há esquema. Tentar as duas formas em
+  // sequência parece mais tolerante e é pior: `https://<endereço do roteiros>`
+  // falha sozinho, mas com o prefixo vira `https://https//%3Cendere%C3%A7o...`,
+  // que o `URL` aceita de bom grado. O valor quebrado voltaria disfarçado de
+  // endereço bom — exatamente o que esta função existe para impedir.
+  const candidato = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`;
+  try {
+    const u = new URL(candidato);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const SISTEMAS = [
   {
     id: "roteiros",
     nome: "Roteiros",
     descricao: "Planejamento e rota dos técnicos",
-    url: process.env.NEXT_PUBLIC_URL_ROTEIROS,
+    url: enderecoDeSistema(process.env.NEXT_PUBLIC_URL_ROTEIROS),
   },
   {
     id: "estoque",
     nome: "Estoque",
     descricao: "Equipamentos, expedição e galpões",
-    url: process.env.NEXT_PUBLIC_URL_ESTOQUE,
+    url: enderecoDeSistema(process.env.NEXT_PUBLIC_URL_ESTOQUE),
   },
   {
     id: "frota",
