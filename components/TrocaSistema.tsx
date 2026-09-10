@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ChevronDown } from "lucide-react";
+import { Boxes, ChevronDown, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -137,13 +137,23 @@ export function TrocaSistema() {
                 {conteudo}
               </div>
             ) : (
+              // `target="_blank"`: instalado como app, cada um destes PWAs tem
+              // `scope: /`, e navegar para outra origem faz o Chrome abrir o
+              // navegador embutido dele — aquela barra branca com o endereço e
+              // um X por cima do sistema de destino. Saindo para fora do app, o
+              // outro sistema abre inteiro. No computador o efeito é uma aba
+              // nova, que para trocar de sistema é o que se espera.
               <a
                 key={s.id}
                 href={s.url}
                 role="menuitem"
-                className="block border-b border-slate-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-slate-50"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-2 border-b border-slate-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-slate-50"
               >
-                {conteudo}
+                <span className="min-w-0 flex-1">{conteudo}</span>
+                <ExternalLink size={13} className="mt-1 shrink-0 text-slate-400" aria-hidden="true" />
+                <span className="sr-only">(abre em outra aba)</span>
               </a>
             );
           })}

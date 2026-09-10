@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { paraInteiro } from "@/lib/frota/numero";
 import { diaHoraDe } from "@/lib/frota/tempo";
 import { enviarFoto } from "@/lib/frota/foto";
 import {
@@ -10,6 +11,7 @@ import {
   Botao,
   BotaoLink,
   Campo,
+  CampoNumero,
   Cartao,
   Carregando,
   Checkbox,
@@ -96,9 +98,9 @@ export default function RegistrarChegadaPage() {
 
   // Quanto o roteiro rodou, conforme o tecnico digita. Null enquanto nao da
   // para saber (sem roteiro escolhido ou campo vazio).
-  const kmDigitado = parseInt(km, 10);
+  const kmDigitado = paraInteiro(km);
   const rodado =
-    sel && !Number.isNaN(kmDigitado) && kmDigitado >= sel.km_saida ? kmDigitado - sel.km_saida : null;
+    sel && kmDigitado != null && kmDigitado >= sel.km_saida ? kmDigitado - sel.km_saida : null;
   const kmAlto = rodado != null && rodado > KM_AVISO && rodado <= KM_ABSURDO;
   const kmAbsurdo = rodado != null && rodado > KM_ABSURDO;
 
@@ -118,13 +120,13 @@ export default function RegistrarChegadaPage() {
       setErro("Selecione um roteiro aberto.");
       return;
     }
-    const kmNum = parseInt(km, 10);
-    if (Number.isNaN(kmNum)) {
+    const kmNum = paraInteiro(km);
+    if (kmNum == null) {
       setErro("Informe o km de chegada.");
       return;
     }
     if (kmNum < sel.km_saida) {
-      setErro(`Km de chegada (${kmNum}) menor que o de saída (${sel.km_saida}).`);
+      setErro(`Km de chegada (${nf(kmNum)}) menor que o de saída (${nf(sel.km_saida)}).`);
       return;
     }
     const rodado = kmNum - sel.km_saida;
@@ -260,16 +262,15 @@ export default function RegistrarChegadaPage() {
 
             {sel && (
               <>
-                <Campo rotulo="Km de chegada" dica={`Km na saída: ${nf(sel.km_saida)}.`}>
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    required
-                    value={km}
-                    onChange={(e) => setKm(e.target.value)}
-                    placeholder="ex.: 66655"
-                  />
-                </Campo>
+                <CampoNumero
+                  rotulo="Km de chegada"
+                  unidade="km"
+                  required
+                  valor={km}
+                  onValor={setKm}
+                  placeholder="ex.: 66655"
+                  dica={`Km na saída: ${nf(sel.km_saida)}.`}
+                />
 
                 <Campo rotulo="Técnico na chegada">
                   <Select value={tecnicoChegadaId} onChange={(e) => setTecnicoChegadaId(e.target.value)}>

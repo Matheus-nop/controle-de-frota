@@ -4,15 +4,18 @@
  * Kit de componentes da Frota.
  *
  * É o mesmo kit do app de Roteiros (roteiros/src/components/ui.tsx), com as
- * peças que a frota tem a mais: `Placa` e os tons de situação de veículo. Quem
- * usa os dois sistemas vê o mesmo botão, o mesmo cartão e o mesmo modal — mudar
- * de app não pode custar reaprender a tela.
+ * peças que a frota tem a mais: `Placa`, `CampoNumero` e os tons de situação de
+ * veículo. Quem usa os dois sistemas vê o mesmo botão, o mesmo cartão e o mesmo
+ * modal — mudar de app não pode custar reaprender a tela.
  *
- * Nada aqui sabe de negócio: só forma. Regra de frota fica nas páginas.
+ * Nada aqui sabe de negócio: só forma. Regra de frota fica nas páginas. As três
+ * peças acima são a exceção assumida — km, placa e situação aparecem em tela
+ * demais para cada uma remontar a sua.
  */
 
 import Link from "next/link";
 import { X } from "lucide-react";
+import { emKm, emKmPorLitro, emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
 import {
   useEffect,
   type ButtonHTMLAttributes,
@@ -104,6 +107,78 @@ export function Campo({
       {children}
       {dica && <span className="mt-1 block text-[11.5px] text-slate-500">{dica}</span>}
     </label>
+  );
+}
+
+/**
+ * Campo de número que fala português.
+ *
+ * Existe porque `<input type="number">` mentiu numa apresentação: o gestor
+ * digitou `30.000` de km e `3.000,00` de orçamento — a grafia certa em pt-BR —
+ * e o sistema gravou 30 e 3, mil vezes menos, sem uma palavra. O `type=number`
+ * ainda tem dois vícios próprios: o valor muda sozinho quando a roda do mouse
+ * passa por cima, e o que ele considera inválido some do campo sem aviso.
+ *
+ * Aqui o campo é texto — o que foi digitado fica onde foi digitado — e a
+ * conversão é a de `lib/frota/numero`, que entende ponto de milhar e vírgula
+ * decimal. O `inputMode` é o que faz o teclado do celular abrir nos números,
+ * que era a única coisa boa que o `type=number` dava.
+ *
+ * E embaixo do campo aparece o número que vai ser gravado, formatado. É a
+ * peça central: `30.000` só é ambíguo até alguém ler "30.000 km" logo abaixo.
+ * Erro de mil vezes não pode depender de conferir a ordem de serviço impressa.
+ */
+export function CampoNumero({
+  rotulo,
+  valor,
+  onValor,
+  unidade,
+  dica,
+  className,
+  ...p
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
+  rotulo: string;
+  valor: string;
+  onValor: (v: string) => void;
+  /** Decide o arredondamento e o texto do eco. `km` não tem casa decimal. */
+  unidade: "km" | "reais" | "km/l";
+  dica?: ReactNode;
+  className?: string;
+}) {
+  const n = unidade === "km" ? paraInteiro(valor) : paraDecimal(valor);
+  const digitou = valor.trim() !== "";
+
+  // Campo vazio não ecoa nada; texto que não vira número avisa, em vez de
+  // virar nulo caladamente.
+  const eco = !digitou ? null : n == null ? (
+    <span className="font-semibold text-red-700">não parece um número</span>
+  ) : (
+    <span className="font-semibold text-slate-700">
+      {unidade === "km" ? emKm(n) : unidade === "reais" ? emReais(n) : emKmPorLitro(n)}
+    </span>
+  );
+
+  // O eco não come a dica da tela: na chegada, "Km na saída: 66.402" é
+  // justamente o que a pessoa está conferindo enquanto digita.
+  const rodape =
+    eco && dica ? (
+      <>
+        {eco} · {dica}
+      </>
+    ) : (
+      (eco ?? dica)
+    );
+
+  return (
+    <Campo rotulo={rotulo} className={className} dica={rodape}>
+      <Input
+        {...p}
+        type="text"
+        inputMode={unidade === "km" ? "numeric" : "decimal"}
+        value={valor}
+        onChange={(e) => onValor(e.target.value)}
+      />
+    </Campo>
   );
 }
 

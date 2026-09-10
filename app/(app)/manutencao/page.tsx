@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Paperclip, Plus, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/frota/tempo";
+import { emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
 import { enviarFoto } from "@/lib/frota/foto";
 import {
   Aviso,
@@ -11,6 +12,7 @@ import {
   Botao,
   BotaoLink,
   Campo,
+  CampoNumero,
   Cartao,
   Carregando,
   Checkbox,
@@ -67,17 +69,6 @@ const FAIXA_STATUS: Record<string, string> = {
 
 function one<T>(rel: T | T[] | null): T | null {
   return Array.isArray(rel) ? (rel[0] ?? null) : rel;
-}
-function intOrNull(s: string): number | null {
-  const n = parseInt(s, 10);
-  return Number.isNaN(n) ? null : n;
-}
-function numOrNull(s: string): number | null {
-  const n = parseFloat((s || "").replace(",", "."));
-  return Number.isNaN(n) ? null : n;
-}
-function brl(n: number | null) {
-  return n == null ? "—" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 function dataBR(s: string | null) {
   return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : "—";
@@ -139,7 +130,7 @@ export default function ManutencaoPage() {
     <Pagina
       estreita
       titulo="Manutenções"
-      subtitulo={carregando ? "carregando…" : `${abertas} em aberto · ${brl(gastoTotal)} já pagos`}
+      subtitulo={carregando ? "carregando…" : `${abertas} em aberto · ${emReais(gastoTotal)} já pagos`}
       acoes={
         <Botao variante="primario" onClick={() => setAddOpen((x) => !x)}>
           {addOpen ? (
@@ -211,6 +202,9 @@ function CartaoManutencao({
   const [aberto, setAberto] = useState(false);
   const [status, setStatus] = useState(m.status);
   const [oficina, setOficina] = useState(m.oficina || "");
+  const [kmAbertura, setKmAbertura] = useState(
+    m.km_abertura != null ? String(m.km_abertura) : "",
+  );
   const [orcamento, setOrcamento] = useState(m.orcamento != null ? String(m.orcamento) : "");
   const [valor, setValor] = useState(m.valor_final != null ? String(m.valor_final) : "");
   const [servico, setServico] = useState(m.servico_realizado || "");
@@ -237,11 +231,12 @@ function CartaoManutencao({
         .update({
           status,
           oficina: oficina.trim() || null,
-          orcamento: numOrNull(orcamento),
-          valor_final: numOrNull(valor),
+          km_abertura: paraInteiro(kmAbertura),
+          orcamento: paraDecimal(orcamento),
+          valor_final: paraDecimal(valor),
           servico_realizado: servico.trim() || null,
           pecas_trocadas: pecas.trim() || null,
-          proxima_revisao_km: intOrNull(proxRev),
+          proxima_revisao_km: paraInteiro(proxRev),
           responsavel_id: resp || null,
           concluida_em: concluindo ? (m.concluida_em ?? hojeBR()) : null,
           nota_fiscal_url: nfUrl,
@@ -265,7 +260,7 @@ function CartaoManutencao({
         <Badge tom={TOM_STATUS[m.status] ?? "mudo"}>{m.status}</Badge>
         {m.prioridade && <span className="text-[11.5px] text-slate-500">{m.prioridade}</span>}
         <span className="ml-auto text-sm font-semibold tabular-nums text-slate-900">
-          {brl(m.valor_final ?? m.orcamento)}
+          {emReais(m.valor_final ?? m.orcamento)}
         </span>
       </div>
 
@@ -325,20 +320,36 @@ function CartaoManutencao({
                 ))}
               </Select>
             </Campo>
-            <Campo rotulo="Orçamento">
-              <Input
-                type="number"
-                step="0.01"
-                value={orcamento}
-                onChange={(e) => setOrcamento(e.target.value)}
-              />
-            </Campo>
-            <Campo rotulo="Valor final" dica="Só depois de pago — é o que entra no gasto da frota.">
-              <Input type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} />
-            </Campo>
-            <Campo rotulo="Próx. revisão (km)">
-              <Input type="number" value={proxRev} onChange={(e) => setProxRev(e.target.value)} />
-            </Campo>
+            {/* O km da abertura entra aqui, e não só no formulário de abrir,
+                porque ele é o número que mais chega errado: vem do hodômetro
+                anotado no pátio e às vezes só é conferido depois. Sem este
+                campo, corrigir um km errado exigia mexer no banco. */}
+            <CampoNumero
+              rotulo="Km na abertura"
+              unidade="km"
+              valor={kmAbertura}
+              onValor={setKmAbertura}
+              dica="Como estava o hodômetro quando a manutenção foi aberta."
+            />
+            <CampoNumero
+              rotulo="Orçamento"
+              unidade="reais"
+              valor={orcamento}
+              onValor={setOrcamento}
+            />
+            <CampoNumero
+              rotulo="Valor final"
+              unidade="reais"
+              valor={valor}
+              onValor={setValor}
+              dica="Só depois de pago — é o que entra no gasto da frota."
+            />
+            <CampoNumero
+              rotulo="Próx. revisão (km)"
+              unidade="km"
+              valor={proxRev}
+              onValor={setProxRev}
+            />
           </div>
 
           <div className="mt-2.5 space-y-2.5">
@@ -412,14 +423,14 @@ function NovaManutencao({
       .from("manutencoes")
       .insert({
         veiculo_id: veiculoId,
-        km_abertura: intOrNull(km),
+        km_abertura: paraInteiro(km),
         origem: origem || null,
         tipo: tipo || null,
         descricao_problema: problema.trim(),
         prioridade: prioridade || null,
         responsavel_id: resp || null,
         oficina: oficina.trim() || null,
-        orcamento: numOrNull(orcamento),
+        orcamento: paraDecimal(orcamento),
         status: "ABERTA",
       })
       .select("id")
@@ -465,9 +476,7 @@ function NovaManutencao({
               ))}
             </Select>
           </Campo>
-          <Campo rotulo="Km na abertura">
-            <Input type="number" value={km} onChange={(e) => setKm(e.target.value)} />
-          </Campo>
+          <CampoNumero rotulo="Km na abertura" unidade="km" valor={km} onValor={setKm} />
           <Campo rotulo="Origem">
             <Select value={origem} onChange={(e) => setOrigem(e.target.value)}>
               <option value="">—</option>
@@ -511,14 +520,12 @@ function NovaManutencao({
           <Campo rotulo="Oficina">
             <Input value={oficina} onChange={(e) => setOficina(e.target.value)} />
           </Campo>
-          <Campo rotulo="Orçamento">
-            <Input
-              type="number"
-              step="0.01"
-              value={orcamento}
-              onChange={(e) => setOrcamento(e.target.value)}
-            />
-          </Campo>
+          <CampoNumero
+            rotulo="Orçamento"
+            unidade="reais"
+            valor={orcamento}
+            onValor={setOrcamento}
+          />
         </div>
 
         <Campo rotulo="Problema *" className="mt-2.5">

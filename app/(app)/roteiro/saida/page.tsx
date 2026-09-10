@@ -3,8 +3,20 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { emKm, paraInteiro } from "@/lib/frota/numero";
 import { enviarFoto } from "@/lib/frota/foto";
-import { Aviso, Botao, BotaoLink, Campo, Cartao, Carregando, Input, Pagina, Select } from "@/components/ui";
+import {
+  Aviso,
+  Botao,
+  BotaoLink,
+  Campo,
+  CampoNumero,
+  Cartao,
+  Carregando,
+  Input,
+  Pagina,
+  Select,
+} from "@/components/ui";
 
 type Veiculo = { id: string; placa: string; modelo: string; km_atual: number | null };
 type Tecnico = { id: string; nome: string };
@@ -48,14 +60,15 @@ export default function RegistrarSaidaPage() {
     e.preventDefault();
     setErro(null);
 
-    const kmNum = parseInt(km, 10);
-    if (!veiculoId || !tecnicoId || Number.isNaN(kmNum)) {
+    const kmNum = paraInteiro(km);
+    if (!veiculoId || !tecnicoId || kmNum == null) {
       setErro("Preencha veículo, técnico e o km de saída.");
       return;
     }
     if (veiculoSel?.km_atual != null && kmNum < veiculoSel.km_atual) {
       setErro(
-        `O km de saída (${kmNum}) é menor que o último km do veículo (${veiculoSel.km_atual}). Confira o hodômetro.`,
+        `O km de saída (${emKm(kmNum)}) é menor que o último km do veículo ` +
+          `(${emKm(veiculoSel.km_atual)}). Confira o hodômetro.`,
       );
       return;
     }
@@ -156,23 +169,19 @@ export default function RegistrarSaidaPage() {
               </Select>
             </Campo>
 
-            <Campo
+            <CampoNumero
               rotulo="Km de saída"
+              unidade="km"
+              required
+              valor={km}
+              onValor={setKm}
+              placeholder="ex.: 66402"
               dica={
                 veiculoSel?.km_atual != null
-                  ? `Último km registrado deste veículo: ${veiculoSel.km_atual.toLocaleString("pt-BR")}.`
+                  ? `Último km deste veículo: ${emKm(veiculoSel.km_atual)}.`
                   : undefined
               }
-            >
-              <Input
-                type="number"
-                inputMode="numeric"
-                required
-                value={km}
-                onChange={(e) => setKm(e.target.value)}
-                placeholder="ex.: 66402"
-              />
-            </Campo>
+            />
 
             <Campo rotulo="Foto do painel / hodômetro (opcional)">
               <Input

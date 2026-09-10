@@ -6,6 +6,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Botao, BotaoLink, Carregando } from "@/components/ui";
+import { emKm, emReais } from "@/lib/frota/numero";
 
 // Ordem de serviço para imprimir e entregar ao técnico.
 //
@@ -48,12 +49,11 @@ function one<T>(rel: T | T[] | null): T | null {
 function dataBR(s: string | null) {
   return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : "__/__/____";
 }
-function nkm(n: number | null | undefined) {
-  return n == null ? "____________" : n.toLocaleString("pt-BR") + " km";
-}
-function brl(n: number | null | undefined) {
-  return n == null ? "____________" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+// No papel, número que não existe vira linha para escrever à mão — é o único
+// motivo de a formatação daqui não ser a de tela.
+const LINHA = "____________";
+const nkm = (n: number | null | undefined) => emKm(n, LINHA);
+const brl = (n: number | null | undefined) => emReais(n, LINHA);
 // Nº da ordem: os 8 primeiros do uuid, em maiúsculas. Curto o bastante para
 // alguém ditar no telefone e ainda achar a ordem certa numa frota de 9.
 function numero(id: string) {
