@@ -32,30 +32,47 @@ export function Logo({
   );
 }
 
-/** Símbolo do sistema: o veículo da frota sobre a estrada. */
+/**
+ * Símbolo do sistema: o veículo da frota sobre a estrada.
+ *
+ * É **o mesmo desenho do ícone do app** (`public/icone.svg` e os PNGs do
+ * manifesto), e isso não é coincidência: no Roteiros o símbolo do topo e o
+ * ícone da tela inicial são a mesma marca, e quem tem os dois instalados
+ * reconhece cada um pelo ícone antes de ler o nome. Mudou aqui, tem que mudar
+ * lá — o `docs/handoff.md` explica como os PNGs são gerados.
+ *
+ * O veículo é âmbar e não branco pelo mesmo motivo: o pin do Roteiros é âmbar
+ * sobre azul, com um detalhe branco. Um ícone branco sobre azul ao lado de um
+ * âmbar sobre azul não se lê como a mesma família — lê-se como dois sistemas de
+ * origens diferentes. O motivo também encolheu: em 32px o veículo grande virava
+ * uma mancha branca sem forma reconhecível.
+ */
 export function Simbolo({ tamanho = 28, className = "" }: { tamanho?: number; className?: string }) {
   return (
     <svg width={tamanho} height={tamanho} viewBox="0 0 32 32" fill="none" className={className} aria-hidden="true">
       <rect width="32" height="32" rx="8" fill="url(#simbolo-frota)" />
-      {/* carroceria */}
-      <path
-        d="M4.5 11.5A1.5 1.5 0 0 1 6 10h9.5a1.5 1.5 0 0 1 1.5 1.5V13h3.9a1.5 1.5 0 0 1 1.24.66l2.1 3.1a1.5 1.5 0 0 1 .26.84V19a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5v-7.5Z"
-        fill="#ffffff"
-      />
-      {/* janela da cabine */}
-      <path d="M17 13h3.6l2.2 3.3H17V13Z" fill="#12365a" />
-      {/* rodas */}
-      <circle cx="10" cy="20.6" r="2.6" fill="#ffffff" />
-      <circle cx="10" cy="20.6" r="1.15" fill="#0d2a47" />
-      <circle cx="21.6" cy="20.6" r="2.6" fill="#ffffff" />
-      <circle cx="21.6" cy="20.6" r="1.15" fill="#0d2a47" />
-      {/* estrada */}
-      <path
-        d="M5 25.6h3.2M12 25.6h8M23.8 25.6h3.2"
-        stroke="#f59e0b"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      />
+      <g transform="translate(1.599 -0.604) scale(0.9086)">
+        {/* carroceria */}
+        <path
+          d="M4.5 11.5A1.5 1.5 0 0 1 6 10h9.5a1.5 1.5 0 0 1 1.5 1.5V13h3.9a1.5 1.5 0 0 1 1.24.66l2.1 3.1a1.5 1.5 0 0 1 .26.84V19a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5v-7.5Z"
+          fill="#f59e0b"
+        />
+        {/* janela da cabine */}
+        <path d="M17 13h3.6l2.2 3.3H17V13Z" fill="#0d2a47" />
+        {/* rodas */}
+        <circle cx="10" cy="20.6" r="2.6" fill="#ffffff" />
+        <circle cx="10" cy="20.6" r="1.15" fill="#0d2a47" />
+        <circle cx="21.6" cy="20.6" r="2.6" fill="#ffffff" />
+        <circle cx="21.6" cy="20.6" r="1.15" fill="#0d2a47" />
+        {/* estrada */}
+        <path
+          d="M5 25.6h3.2M12 25.6h8M23.8 25.6h3.2"
+          stroke="#ffffff"
+          strokeOpacity="0.5"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+        />
+      </g>
       <defs>
         <linearGradient id="simbolo-frota" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
           <stop stopColor="#1f4f7f" />

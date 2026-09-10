@@ -403,6 +403,48 @@ Pendente relacionado: o km do `/checklist` ainda não é validado contra o km
 anterior do veículo, como a saída e a chegada são. A regra do CLAUDE.md pede
 isso; ficou de fora desta correção por ser outro assunto.
 
+### Ícone do app (feito, 2026-09-10)
+O ícone do PWA era a logomarca do Grupo Nova Opção encolhida. Em 48px na tela
+inicial ela é uma mancha escura ilegível — e, pior, seria a mesma mancha de
+qualquer outro sistema do grupo. Ícone de app existe para diferenciar à
+distância de um polegar, não para repetir a marca.
+
+Agora o ícone é **o símbolo do sistema**: o veículo sobre a estrada, o mesmo
+desenho do `Simbolo` em `components/Logo.tsx`. É a regra que o Roteiros já
+segue — lá o símbolo do topo e o ícone da tela inicial são a mesma marca.
+
+O veículo passou de branco para **âmbar**, e o motivo é a família: o pin do
+Roteiros é âmbar sobre azul com um detalhe branco. Um ícone branco sobre azul ao
+lado de um âmbar sobre azul não se lê como o mesmo grupo. O desenho também
+encolheu (ocupa 330 de 512, contra os 400 da primeira tentativa) — em 32px o
+veículo grande virava uma mancha sem forma.
+
+**Arquivos.** `public/icone.svg` é a fonte; os PNGs saem dele.
+
+| arquivo | tamanho | para quê |
+|---|---|---|
+| `icon192.png` | 192 | manifesto, `purpose: any` |
+| `icon512.png` | 512 | manifesto, `purpose: any` |
+| `icon-maskable-512.png` | 512 | manifesto, `purpose: maskable` |
+| `appleicon.png` | 180 | `apple-touch-icon` do iOS |
+
+O **maskable é um arquivo à parte**, e tem que ser. O Android recorta o ícone na
+forma do aparelho (círculo, quadrado, squircle) e só respeita o círculo central
+de 80% do lado; por isso ele tem o fundo até a borda (sem canto arredondado) e o
+desenho menor, dentro da zona segura. O manifesto antigo declarava o `icon512`
+comum como maskable, o que corta as bordas do desenho.
+
+**Se for mexer no desenho:** mude os três juntos — `components/Logo.tsx`
+(`Simbolo`), `public/icone.svg` e os PNGs. O `Simbolo` usa o mesmo `<g
+transform>` que o SVG do ícone, só que em viewBox 32 em vez de 512 (é a mesma
+conta dividida por 16), justamente para que os dois não possam divergir sem
+alguém perceber.
+
+**O manifesto também ganhou** `id`, `scope`, `lang` e atalhos. O `id` importa: sem
+ele o navegador identifica o app pela `start_url`, e mudar a start_url um dia
+faria o celular tratar isto como app novo — dois ícones iguais na tela inicial e
+a instalação antiga órfã.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
