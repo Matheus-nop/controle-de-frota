@@ -413,11 +413,17 @@ Agora o ícone é **o símbolo do sistema**: o veículo sobre a estrada, o mesmo
 desenho do `Simbolo` em `components/Logo.tsx`. É a regra que o Roteiros já
 segue — lá o símbolo do topo e o ícone da tela inicial são a mesma marca.
 
-O veículo passou de branco para **âmbar**, e o motivo é a família: o pin do
-Roteiros é âmbar sobre azul com um detalhe branco. Um ícone branco sobre azul ao
-lado de um âmbar sobre azul não se lê como o mesmo grupo. O desenho também
-encolheu (ocupa 330 de 512, contra os 400 da primeira tentativa) — em 32px o
-veículo grande virava uma mancha sem forma.
+O veículo é **branco** sobre o azul, como o cubo do Estoque; a estrada âmbar é o
+que amarra no pin do Roteiros. Vale registrar o que se descobriu no caminho: os
+três ícones do grupo **não seguem um sistema único**. O Roteiros é gradiente com
+um motivo âmbar sólido; o Estoque é azul chapado com traço branco. Chegou a
+existir uma versão âmbar deste ícone, para casar com o Roteiros, mas ela
+destoava do Estoque — foi decisão de 2026-09-10 manter o veículo branco, que
+fica no meio e não briga com nenhum dos dois. Unificar os três de verdade é
+trabalho de mexer nos três repositórios, e não foi feito.
+
+O desenho encolheu (ocupa 330 de 512, contra os 400 da primeira tentativa) — em
+32px o veículo grande virava uma mancha sem forma.
 
 **Arquivos.** `public/icone.svg` é a fonte; os PNGs saem dele.
 
