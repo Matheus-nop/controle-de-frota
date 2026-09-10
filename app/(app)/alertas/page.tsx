@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, Inbox, ParkingCircle, ShieldAlert, Wrench, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  GitCompareArrows,
+  Inbox,
+  ParkingCircle,
+  ShieldAlert,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Aviso,
@@ -40,6 +49,7 @@ const ICONE: Record<string, LucideIcon> = {
   ROTEIRO: Inbox,
   PARADO: ParkingCircle,
   "OCORRÊNCIA": ShieldAlert,
+  AVARIA: GitCompareArrows,
 };
 
 // Para onde o gestor vai para resolver cada tipo de alerta.
@@ -51,6 +61,10 @@ function acao(a: Alerta): { href: string; texto: string } {
       return { href: "/roteiro/chegada", texto: "Registrar a chegada" };
     case "OCORRÊNCIA":
       return { href: "/ocorrencias", texto: "Tratar ocorrência" };
+    // O alerta diz que apareceu dano. A pergunta seguinte é sempre "apareceu
+    // quando?", e quem responde isso é o comparativo, já no veículo certo.
+    case "AVARIA":
+      return { href: "/comparativo?placa=" + a.placa, texto: "Comparar vistorias" };
     default:
       return { href: "/historico?placa=" + a.placa, texto: "Ver histórico" };
   }

@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { paraInteiro } from "@/lib/frota/numero";
-import { hojeBR } from "@/lib/frota/tempo";
+import { avariasDe, resumoDaAvaria, type Avaria } from "@/lib/frota/avarias";
+import { emKm, paraInteiro } from "@/lib/frota/numero";
+import { dataBR, hojeBR } from "@/lib/frota/tempo";
 import { enviarFotos } from "@/lib/frota/foto";
 import {
   Aviso,
+  Badge,
   Botao,
   BotaoLink,
   Campo,
@@ -22,6 +24,23 @@ import {
 
 type Veiculo = { id: string; placa: string; modelo: string; status: string };
 type Tecnico = { id: string; nome: string };
+
+/** Uma avaria enquanto está sendo digitada. Vira `Avaria` só na hora de salvar,
+ *  quando as fotos já subiram e viraram URL. */
+type AvariaForm = { onde: string; tipo: string; existia: string; desc: string; fotos: FileList | null };
+
+const AVARIA_VAZIA: AvariaForm = { onde: "", tipo: "", existia: "", desc: "", fotos: null };
+
+/** O checklist anterior do mesmo veículo, para o técnico conferir antes de
+ *  registrar. Sem isto ele redigita a mesma avaria toda semana, ou deixa de
+ *  registrar achando que já está lá. */
+type Anterior = {
+  data: string;
+  km_atual: number | null;
+  apto: boolean;
+  tecnico: string | null;
+  avarias: Avaria[];
+};
 
 const ITENS_RAPIDO: [string, string][] = [
   ["pneus", "Pneus em boas condições?"],
@@ -77,6 +96,66 @@ function SimNao({ valor, onEscolher }: { valor: string; onEscolher(v: string): v
   );
 }
 
+/**
+ * O que a última vistoria deste veículo encontrou.
+ *
+ * Existe para o técnico não ter que "mencionar" de novo o que já está
+ * registrado. Antes, sem ver o anterior, ou ele redigitava o mesmo amassado
+ * toda semana — e o histórico virava uma pilha de avarias repetidas que ninguém
+ * conseguia contar — ou deixava de registrar achando que já estava lá.
+ *
+ * Fica fora do componente da página: definido dentro, o React o remontaria a
+ * cada tecla digitada em qualquer campo.
+ */
+function UltimoChecklist({ a }: { a: Anterior }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-200">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[13px] font-bold text-slate-800">Última vistoria deste veículo</span>
+        <Badge tom={a.apto ? "ok" : "critico"}>{a.apto ? "APTO" : "NÃO APTO"}</Badge>
+      </div>
+      <div className="mt-1 text-[12px] text-slate-600">
+        {dataBR(a.data)}
+        {a.tecnico ? ` · por ${a.tecnico}` : ""}
+        {a.km_atual != null ? ` · ${emKm(a.km_atual)}` : ""}
+      </div>
+
+      {a.avarias.length === 0 ? (
+        <p className="mt-2 text-[12.5px] text-slate-500">
+          Nenhuma avaria registrada. Se encontrar alguma agora, ela é nova.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2.5 text-[12.5px] font-semibold text-slate-700">
+            {a.avarias.length === 1
+              ? "1 avaria já registrada — não precisa repetir:"
+              : `${a.avarias.length} avarias já registradas — não precisa repetir:`}
+          </p>
+          <ul className="mt-1.5 space-y-1.5">
+            {a.avarias.map((av, i) => (
+              <li key={i} className="flex flex-wrap items-center gap-2 text-[12.5px] text-slate-700">
+                <span className="font-semibold">{resumoDaAvaria(av)}</span>
+                {av.descricao && <span className="text-slate-500">{av.descricao}</span>}
+                {av.fotos.map((u, k) => (
+                  <a
+                    key={k}
+                    href={u}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11.5px] font-medium text-brand-700 hover:underline"
+                  >
+                    foto {k + 1}
+                  </a>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ChecklistPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
@@ -91,11 +170,11 @@ export default function ChecklistPage() {
   const [rapido, setRapido] = useState<Record<string, string>>({});
 
   const [novaAvaria, setNovaAvaria] = useState("");
-  const [avOnde, setAvOnde] = useState("");
-  const [avTipo, setAvTipo] = useState("");
-  const [avExistia, setAvExistia] = useState("");
-  const [avDesc, setAvDesc] = useState("");
-  const [fotoAvaria, setFotoAvaria] = useState<FileList | null>(null);
+  // Uma vistoria pode encontrar mais de um dano. Antes cabia um só, e o segundo
+  // virava texto solto na descrição — o que impedia comparar uma semana com a
+  // outra, que é o que a equipe pediu.
+  const [avarias, setAvarias] = useState<AvariaForm[]>([]);
+  const [anterior, setAnterior] = useState<Anterior | null>(null);
 
   const [apto, setApto] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -127,7 +206,52 @@ export default function ChecklistPage() {
     })();
   }, []);
 
+  // O checklist anterior do veículo escolhido. Busca a cada troca de veículo, e
+  // não de uma vez no começo: são 9 veículos, mas cada vistoria olha um só.
+  useEffect(() => {
+    let valeu = true;
+    (async () => {
+      // A limpeza também vai para dentro do callback: mexer no estado direto no
+      // corpo do efeito dispara render em cascata, e o lint do projeto barra.
+      if (!veiculoId) {
+        if (valeu) setAnterior(null);
+        return;
+      }
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("checklists")
+        .select("data, km_atual, apto, itens, tecnico:tecnico_id(nome)")
+        .eq("veiculo_id", veiculoId)
+        .order("data", { ascending: false })
+        .limit(1);
+      if (!valeu) return;
+      const c = (data ?? [])[0] as
+        | { data: string; km_atual: number | null; apto: boolean; itens: unknown; tecnico: { nome: string } | { nome: string }[] | null }
+        | undefined;
+      if (!c) {
+        setAnterior(null);
+        return;
+      }
+      const t = Array.isArray(c.tecnico) ? c.tecnico[0] : c.tecnico;
+      setAnterior({
+        data: c.data,
+        km_atual: c.km_atual,
+        apto: c.apto,
+        tecnico: t?.nome ?? null,
+        avarias: avariasDe(c.itens),
+      });
+    })();
+    // A vistoria seguinte pode trocar de veículo antes desta resposta chegar.
+    return () => {
+      valeu = false;
+    };
+  }, [veiculoId]);
+
   const respondidas = ITENS_RAPIDO.filter(([k]) => rapido[k]).length;
+
+  function mudarAvaria(i: number, campo: keyof AvariaForm, valor: string | FileList | null) {
+    setAvarias((lista) => lista.map((a, k) => (k === i ? { ...a, [campo]: valor } : a)));
+  }
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
@@ -154,23 +278,41 @@ export default function ChecklistPage() {
       return;
     }
 
+    // Avaria marcada como SIM tem que ter ao menos uma preenchida: senão o
+    // checklist diz "tem dano" e não diz qual, que é pior do que dizer NÃO.
+    const listaAvarias = novaAvaria === "SIM" ? avarias.filter((a) => a.onde || a.tipo || a.desc.trim() || a.fotos?.length) : [];
+    if (novaAvaria === "SIM" && listaAvarias.length === 0) {
+      setErro("Você marcou que há avaria nova: descreva ao menos uma, ou responda NÃO.");
+      return;
+    }
+
     setSalvando(true);
     try {
       const supabase = createClient();
-      const [fSemanais, fAvaria, fBloqueio] = await Promise.all([
+      const [fSemanais, fBloqueio] = await Promise.all([
         enviarFotos(supabase, "checklists", `${veiculoId}/semanal`, fotosSemanais),
-        enviarFotos(supabase, "checklists", `${veiculoId}/avaria`, novaAvaria === "SIM" ? fotoAvaria : null),
         enviarFotos(supabase, "checklists", `${veiculoId}/bloqueio`, apto === "NÃO" ? fotoBloqueio : null),
       ]);
+
+      // Cada avaria sobe as suas fotos no próprio prefixo. O índice entra no
+      // caminho para duas avarias da mesma vistoria não se misturarem no balde.
+      const avariasGravadas = await Promise.all(
+        listaAvarias.map(async (a, i) => ({
+          onde: a.onde || null,
+          tipo: a.tipo || null,
+          ja_existia: a.existia || null,
+          descricao: a.desc.trim() || null,
+          fotos: await enviarFotos(supabase, "checklists", `${veiculoId}/avaria-${i + 1}`, a.fotos),
+        })),
+      );
 
       const itens = {
         usado_por_outro: usadoOutro || null,
         checklist: rapido,
         nova_avaria: novaAvaria,
-        avaria:
-          novaAvaria === "SIM"
-            ? { onde: avOnde, tipo: avTipo, ja_existia: avExistia, descricao: avDesc, fotos: fAvaria }
-            : null,
+        // `avarias` no plural. O singular continua sendo lido em
+        // `lib/frota/avarias.ts`, para as vistorias antigas não sumirem.
+        avarias: avariasGravadas,
         fotos_semanais: fSemanais,
         fotos_bloqueio: fBloqueio,
       };
@@ -265,6 +407,13 @@ export default function ChecklistPage() {
                 </Select>
               </Campo>
 
+              {/* A vistoria anterior deste veículo.
+                  Aparece antes do km de propósito: é o número que a pessoa vai
+                  digitar em seguida, e o de antes serve de referência.
+                  A lista de avarias é o ponto: o técnico não precisa redigitar o
+                  amassado que já está registrado — só o que for novo. */}
+              {anterior && <UltimoChecklist a={anterior} />}
+
               <CampoNumero
                 rotulo="Km atual"
                 unidade="km"
@@ -314,53 +463,95 @@ export default function ChecklistPage() {
                 <span className="text-[13.5px] font-medium text-slate-700">
                   O veículo apresenta alguma nova avaria?
                 </span>
-                <SimNao valor={novaAvaria} onEscolher={setNovaAvaria} />
+                <SimNao
+                  valor={novaAvaria}
+                  onEscolher={(v) => {
+                    setNovaAvaria(v);
+                    // SIM já abre a primeira ficha: marcar e não ter onde
+                    // escrever é o tipo de tela que faz desistir no meio.
+                    setAvarias(v === "SIM" ? (l) => (l.length ? l : [{ ...AVARIA_VAZIA }]) : []);
+                  }}
+                />
               </div>
 
               {novaAvaria === "SIM" && (
-                <div className="space-y-3.5 rounded-lg bg-amber-50/60 p-3.5 ring-1 ring-inset ring-amber-200">
-                  <Campo rotulo="Onde?">
-                    <Select value={avOnde} onChange={(e) => setAvOnde(e.target.value)}>
-                      <option value="">Selecione…</option>
-                      {AVARIA_ONDE.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </Select>
-                  </Campo>
-                  <Campo rotulo="Tipo de avaria">
-                    <Select value={avTipo} onChange={(e) => setAvTipo(e.target.value)}>
-                      <option value="">Selecione…</option>
-                      {AVARIA_TIPO.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </Select>
-                  </Campo>
-                  <Campo rotulo="A avaria já existia?">
-                    <Select value={avExistia} onChange={(e) => setAvExistia(e.target.value)}>
-                      <option value="">Selecione…</option>
-                      {AVARIA_EXISTIA.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </Select>
-                  </Campo>
-                  <Campo rotulo="Descreva rapidamente">
-                    <Input type="text" value={avDesc} onChange={(e) => setAvDesc(e.target.value)} />
-                  </Campo>
-                  <Campo rotulo="Foto da avaria">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => setFotoAvaria(e.target.files)}
-                      className={CAMPO_ARQUIVO}
-                    />
-                  </Campo>
+                <div className="space-y-3">
+                  {avarias.map((a, i) => (
+                    <div
+                      key={i}
+                      className="space-y-3.5 rounded-lg bg-amber-50/60 p-3.5 ring-1 ring-inset ring-amber-200"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[13px] font-bold text-amber-900">
+                          Avaria {i + 1} de {avarias.length}
+                        </span>
+                        {avarias.length > 1 && (
+                          <Botao
+                            type="button"
+                            tamanho="sm"
+                            variante="perigo"
+                            onClick={() => setAvarias((l) => l.filter((_, k) => k !== i))}
+                          >
+                            <Trash2 size={13} />
+                            Remover
+                          </Botao>
+                        )}
+                      </div>
+                      <Campo rotulo="Onde?">
+                        <Select value={a.onde} onChange={(e) => mudarAvaria(i, "onde", e.target.value)}>
+                          <option value="">Selecione…</option>
+                          {AVARIA_ONDE.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </Select>
+                      </Campo>
+                      <Campo rotulo="Tipo de avaria">
+                        <Select value={a.tipo} onChange={(e) => mudarAvaria(i, "tipo", e.target.value)}>
+                          <option value="">Selecione…</option>
+                          {AVARIA_TIPO.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </Select>
+                      </Campo>
+                      <Campo rotulo="A avaria já existia?">
+                        <Select value={a.existia} onChange={(e) => mudarAvaria(i, "existia", e.target.value)}>
+                          <option value="">Selecione…</option>
+                          {AVARIA_EXISTIA.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </Select>
+                      </Campo>
+                      <Campo rotulo="Descreva rapidamente">
+                        <Input
+                          type="text"
+                          value={a.desc}
+                          onChange={(e) => mudarAvaria(i, "desc", e.target.value)}
+                        />
+                      </Campo>
+                      <Campo rotulo="Foto da avaria">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => mudarAvaria(i, "fotos", e.target.files)}
+                          className={CAMPO_ARQUIVO}
+                        />
+                      </Campo>
+                    </div>
+                  ))}
+                  {/* Uma vistoria acha dois amassados e um farol quebrado no
+                      mesmo dia. Cada um é um registro, senão não dá para dizer
+                      na semana seguinte quantos havia. */}
+                  <Botao type="button" onClick={() => setAvarias((l) => [...l, { ...AVARIA_VAZIA }])}>
+                    <Plus size={14} />
+                    Adicionar outra avaria
+                  </Botao>
                 </div>
               )}
             </div>

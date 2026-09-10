@@ -66,6 +66,14 @@ export function diaISO(date: Date): string {
   return fmtDia.format(date);
 }
 
+/**
+ * "2026-09-10" -> "10/09/2026". Data pura, sem hora: corta o texto em vez de
+ * virar `Date`, porque o parser trata data pura como UTC e o dia recuaria.
+ */
+export function dataBR(s: string | null | undefined): string {
+  return s && SO_DIA.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : "—";
+}
+
 /** O dia de hoje em São Paulo, "2026-07-24". */
 export function hojeBR(): string {
   return diaISO(new Date());

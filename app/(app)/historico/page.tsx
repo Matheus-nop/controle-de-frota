@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ClipboardCheck, Truck, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { diaDe, intervaloUTC, periodoPadrao } from "@/lib/frota/tempo";
+import { emKm } from "@/lib/frota/numero";
+import { avariasDe, resumoDaAvaria, urls, type Avaria } from "@/lib/frota/avarias";
 import {
   Badge,
   Campo,
@@ -38,6 +40,8 @@ type Registro = {
   detalhe: string | null;
   alerta: boolean; // pinta a borda: checklist nao apto, pendencia, ocorrencia grave
   fotos: Foto[];
+  /** As avarias da vistoria. Vazio nos outros tipos — é o que o filtro usa. */
+  avarias: Avaria[];
 };
 
 const TOM_TIPO: Record<string, Tom> = {
@@ -62,13 +66,6 @@ function one<T>(rel: T | T[] | null): T | null {
 function dataBR(s: string | null) {
   return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : "—";
 }
-// Aceita so o que parece URL: o jsonb e livre e ja passou por versoes diferentes
-// do formulario.
-function urls(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v.filter((x): x is string => typeof x === "string" && x.startsWith("http"));
-}
-
 export default function HistoricoPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [registros, setRegistros] = useState<Registro[]>([]);
@@ -79,6 +76,13 @@ export default function HistoricoPage() {
   const [ate, setAte] = useState(() => periodoPadrao(30).ate);
   const [tipo, setTipo] = useState("TODOS");
   const [soComFoto, setSoComFoto] = useState(false);
+  // Filtro de avaria: "só com avaria" mais o recorte por onde e por tipo. É a
+  // pergunta que o gestor faz depois de um sinistro — "quantas vezes a traseira
+  // desta Strada já apareceu amassada?" — e que antes exigia abrir vistoria por
+  // vistoria.
+  const [soComAvaria, setSoComAvaria] = useState(false);
+  const [avOnde, setAvOnde] = useState("");
+  const [avTipo, setAvTipo] = useState("");
 
   // A ficha do veiculo (modal do painel) manda pra ca com ?placa=XXX.
   useEffect(() => {
@@ -134,9 +138,15 @@ export default function HistoricoPage() {
       const v = one(c.veiculo as { placa: string; modelo: string } | null);
       const t = one(c.tecnico as { nome: string } | null);
       const itens = (c.itens ?? {}) as any;
+      // As avarias saem do leitor compartilhado, que entende a forma antiga (uma
+      // avaria) e a nova (lista). Sem ele, a vistoria com três danos entraria
+      // aqui sem nenhuma foto de avaria.
+      const avarias = avariasDe(itens);
       const fotos: Foto[] = [
         ...urls(itens.fotos_semanais).map((u) => ({ url: u, legenda: "semanal" })),
-        ...urls(itens?.avaria?.fotos).map((u) => ({ url: u, legenda: "avaria" })),
+        ...avarias.flatMap((a, i) =>
+          a.fotos.map((u) => ({ url: u, legenda: avarias.length > 1 ? `avaria ${i + 1}` : "avaria" })),
+        ),
         ...urls(itens.fotos_bloqueio).map((u) => ({ url: u, legenda: "bloqueio" })),
       ];
       // foto_url e a primeira das semanais; so entra se nao veio na lista.
@@ -151,9 +161,17 @@ export default function HistoricoPage() {
         modelo: v?.modelo ?? "",
         tecnico: t?.nome ?? "—",
         resumo: c.apto ? "Apto para operação" : "NÃO APTO — " + (c.motivo_bloqueio || "sem motivo informado"),
-        detalhe: [c.descricao, c.km_atual != null ? `${c.km_atual} km` : null].filter(Boolean).join(" · ") || null,
+        detalhe:
+          [
+            c.descricao,
+            c.km_atual != null ? emKm(c.km_atual) : null,
+            avarias.length ? avarias.map(resumoDaAvaria).join(" | ") : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || null,
         alerta: !c.apto,
         fotos,
+        avarias,
       });
     }
 
@@ -180,6 +198,7 @@ export default function HistoricoPage() {
         ].filter(Boolean).join(" · ") || null,
         alerta: r.situacao === "SEM FECHAMENTO" || !!r.houve_pendencia,
         fotos,
+        avarias: [],
       });
     }
 
@@ -197,6 +216,7 @@ export default function HistoricoPage() {
         detalhe: [o.descricao, o.local].filter(Boolean).join(" · ") || null,
         alerta: o.gravidade === "GRAVE",
         fotos: urls(o.fotos).map((u) => ({ url: u, legenda: "dano" })),
+        avarias: [],
       });
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -212,15 +232,38 @@ export default function HistoricoPage() {
     })();
   }, [carregar]);
 
+  // As opções de onde/tipo saem do que existe no período, e não de uma lista
+  // fixa: filtro que oferece opção sem resultado faz a pessoa duvidar do dado.
+  const ondesVistos = Array.from(
+    new Set(registros.flatMap((r) => r.avarias.map((a) => a.onde).filter((x): x is string => !!x))),
+  ).sort();
+  const tiposVistos = Array.from(
+    new Set(registros.flatMap((r) => r.avarias.map((a) => a.tipo).filter((x): x is string => !!x))),
+  ).sort();
+
+  const filtrandoAvaria = soComAvaria || !!avOnde || !!avTipo;
   const lista = registros
     .filter((r) => (tipo === "TODOS" ? true : r.tipo === tipo))
-    .filter((r) => (soComFoto ? r.fotos.length > 0 : true));
+    .filter((r) => (soComFoto ? r.fotos.length > 0 : true))
+    // Escolher onde ou tipo já implica "só com avaria": pedir traseira e receber
+    // roteiro sem avaria nenhuma seria uma lista que não responde a pergunta.
+    .filter((r) =>
+      !filtrandoAvaria
+        ? true
+        : r.avarias.some(
+            (a) => (!avOnde || a.onde === avOnde) && (!avTipo || a.tipo === avTipo),
+          ),
+    );
   const totalFotos = lista.reduce((s, r) => s + r.fotos.length, 0);
+  const totalAvarias = lista.reduce((s, r) => s + r.avarias.length, 0);
 
   return (
     <Pagina
       titulo="Histórico e fotos"
-      subtitulo={`${lista.length} registro(s) · ${totalFotos} foto(s)`}
+      subtitulo={
+        `${lista.length} registro(s) · ${totalFotos} foto(s)` +
+        (totalAvarias ? ` · ${totalAvarias} avaria(s)` : "")
+      }
     >
       <Cartao className="mb-3 p-3.5">
         <div className="flex flex-wrap gap-2.5">
@@ -261,7 +304,45 @@ export default function HistoricoPage() {
             <Checkbox checked={soComFoto} onChange={(e) => setSoComFoto(e.target.checked)} />
             Só com foto
           </label>
+          <label className="flex items-center gap-2 text-[12.5px] text-slate-600">
+            <Checkbox
+              checked={soComAvaria}
+              onChange={(e) => {
+                setSoComAvaria(e.target.checked);
+                if (!e.target.checked) {
+                  setAvOnde("");
+                  setAvTipo("");
+                }
+              }}
+            />
+            Só com avaria
+          </label>
         </div>
+
+        {(soComAvaria || filtrandoAvaria) && (
+          <div className="mt-2.5 flex flex-wrap gap-2.5 border-t border-slate-100 pt-2.5">
+            <Campo rotulo="Onde" className="min-w-[160px] flex-[1_1_180px]">
+              <Select value={avOnde} onChange={(e) => setAvOnde(e.target.value)}>
+                <option value="">Qualquer lugar</option>
+                {ondesVistos.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </Select>
+            </Campo>
+            <Campo rotulo="Tipo de avaria" className="min-w-[160px] flex-[1_1_180px]">
+              <Select value={avTipo} onChange={(e) => setAvTipo(e.target.value)}>
+                <option value="">Qualquer tipo</option>
+                {tiposVistos.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </Select>
+            </Campo>
+          </div>
+        )}
       </Cartao>
 
       {carregando ? (
