@@ -451,6 +451,57 @@ ele o navegador identifica o app pela `start_url`, e mudar a start_url um dia
 faria o celular tratar isto como app novo — dois ícones iguais na tela inicial e
 a instalação antiga órfã.
 
+### Avarias e escopo de manutenção (feito, 2026-09-10)
+Cinco pedidos que saíram da reunião de apresentação. Quatro giram em torno de
+avaria; o quinto é um módulo novo.
+
+**O modelo de avaria mudou, e é a base dos outros.** O `checklists.itens`
+guardava UMA avaria por vistoria (`itens.avaria`). Contar "ontem 2, hoje 3" era
+impossível: o segundo dano do dia sobrescrevia o primeiro ou virava texto solto
+na descrição. Agora o formulário grava `itens.avarias` (lista) e permite
+adicionar quantas forem encontradas.
+
+**As vistorias antigas não foram migradas, de propósito.** Vistoria é registro do
+que alguém viu num dia, e reescrever isso para caber num formato novo é perder a
+prova — que é para o que as fotos servem. Quem lê aceita as duas formas:
+`lib/frota/avarias.ts` no app, `public.qtd_avarias()` no banco. **As duas têm que
+concordar**: o alerta diz "3 avarias" e a tela precisa mostrar três. Mexeu numa,
+mexa na outra — há um teste dos 11 formatos rodado nas duas linguagens.
+
+| pedido | onde ficou |
+|---|---|
+| 1 · filtro de avarias no histórico | `/historico`: "só com avaria" + recorte por onde e por tipo |
+| 2 · alerta comparando checklists | `v_alertas_ativos` ganhou o tipo `AVARIA` (migração 0014) |
+| 3 · comparativo para evidência | `/comparativo` — duas vistorias lado a lado, com as fotos |
+| 4 · escopo de manutenção | `/escopos` + migração 0015 |
+| 5 · técnico vê o último checklist | cartão no topo do `/checklist`, ao escolher o veículo |
+
+**O alerta de avaria** compara as duas últimas vistorias do veículo e dispara
+quando a contagem sobe. Exige vistoria anterior (a primeira registra o que já
+existia, não dano novo) e ignora vistoria com mais de 60 dias — alerta velho
+ensina o gestor a ignorar a tela. Some sozinho quando a vistoria seguinte não
+acusa aumento.
+
+**O escopo de manutenção é por MODELO**, não por placa: a frota tem 9 veículos em
+5 modelos, e três Kia Bongo com o mesmo plano digitado três vezes é uma chance em
+três de sair diferente. Decisão de 2026-09-10, com o gestor.
+
+A regra de km é **"a cada", e não "no"**: `km_intervalo` 20.000 vale aos 20, 40,
+60, 80. Um marco puxa toda regra cujo intervalo o divide. É isso que resolve o
+caso levantado na reunião — pastilha de freio não se troca a cada 10 ou 20 mil:
+ela mora numa regra de 40.000 e aparece de 40 em 40, enquanto o óleo mora na de
+10.000 e aparece em todas. Não existe repetição global; existe uma por linha.
+
+O marco é comparado contra `veiculos.proxima_revisao_km`, e não contra o
+hodômetro: 66.402 não é múltiplo de nada, e a revisão é planejada para o marco.
+Quem abre a preventiva confirma o número na tela.
+
+**`manutencoes.revisao_km` guarda só o marco** — uma decisão, não um cálculo. Os
+itens NÃO são copiados para a manutenção: a ordem de serviço monta a lista na
+hora, a partir do modelo e desse número. É a regra do projeto sobre não gravar
+derivado, e tem uma consequência que vale saber: reimprimir uma ordem depois de o
+plano mudar mostra o plano de agora.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`

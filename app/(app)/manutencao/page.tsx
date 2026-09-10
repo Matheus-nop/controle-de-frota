@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Paperclip, Plus, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/frota/tempo";
-import { emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
+import { emKm, emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
+import { itensDoMarco, marcoSugerido, regrasDoMarco, type Escopo } from "@/lib/frota/escopo";
 import { enviarFoto } from "@/lib/frota/foto";
 import {
   Aviso,
@@ -25,7 +26,13 @@ import {
   type Tom,
 } from "@/components/ui";
 
-type Veiculo = { id: string; placa: string; modelo: string };
+type Veiculo = {
+  id: string;
+  placa: string;
+  modelo: string;
+  km_atual: number | null;
+  proxima_revisao_km: number | null;
+};
 type Tecnico = { id: string; nome: string };
 type Manut = {
   id: string;
@@ -85,6 +92,7 @@ export default function ManutencaoPage() {
   const [manuts, setManuts] = useState<Manut[]>([]);
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
+  const [escopos, setEscopos] = useState<Escopo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [filtro, setFiltro] = useState("ABERTAS");
@@ -92,21 +100,25 @@ export default function ManutencaoPage() {
   const carregar = useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.getUser();
-    const [m, v, t] = await Promise.all([
+    const [m, v, t, esc] = await Promise.all([
       supabase
         .from("manutencoes")
         .select("*, veiculo:veiculo_id(placa,modelo)")
         .order("aberta_em", { ascending: false }),
       supabase
         .from("veiculos")
-        .select("id, placa, modelo")
+        .select("id, placa, modelo, km_atual, proxima_revisao_km")
         .in("status", ["ATIVO", "BLOQUEADO", "MANUTENCAO"])
         .order("placa"),
       supabase.from("tecnicos").select("id, nome").eq("ativo", true).order("nome"),
+      supabase.from("escopos_manutencao").select("*").eq("ativo", true),
     ]);
     setManuts((m.data as Manut[]) ?? []);
     setVeiculos((v.data as Veiculo[]) ?? []);
     setTecnicos((t.data as Tecnico[]) ?? []);
+    // Sem escopo cadastrado a lista vem vazia e a tela segue igual: o escopo
+    // acrescenta, não bloqueia quem ainda não cadastrou plano nenhum.
+    setEscopos((esc.data as Escopo[]) ?? []);
     setCarregando(false);
   }, []);
 
@@ -148,6 +160,7 @@ export default function ManutencaoPage() {
         <NovaManutencao
           veiculos={veiculos}
           tecnicos={tecnicos}
+          escopos={escopos}
           onCriada={() => {
             setCarregando(true);
             void carregar();
@@ -388,10 +401,12 @@ function CartaoManutencao({
 function NovaManutencao({
   veiculos,
   tecnicos,
+  escopos,
   onCriada,
 }: {
   veiculos: Veiculo[];
   tecnicos: Tecnico[];
+  escopos: Escopo[];
   onCriada: () => void;
 }) {
   const [veiculoId, setVeiculoId] = useState("");
@@ -403,6 +418,9 @@ function NovaManutencao({
   const [resp, setResp] = useState("");
   const [oficina, setOficina] = useState("");
   const [orcamento, setOrcamento] = useState("");
+  // O marco de revisão que esta preventiva atende. É o que resolve o escopo do
+  // modelo, e é uma decisão de quem abre — por isso é campo, e não conta.
+  const [revisaoKm, setRevisaoKm] = useState("");
   const [bloquear, setBloquear] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -431,6 +449,9 @@ function NovaManutencao({
         responsavel_id: resp || null,
         oficina: oficina.trim() || null,
         orcamento: paraDecimal(orcamento),
+        // Só na preventiva: numa corretiva o marco não quer dizer nada, e
+        // gravá-lo faria a ordem de serviço imprimir uma lista que ninguém pediu.
+        revisao_km: tipo === "PREVENTIVA" ? paraInteiro(revisaoKm) : null,
         status: "ABERTA",
       })
       .select("id")
@@ -446,6 +467,21 @@ function NovaManutencao({
     setCriadaId((criada as { id: string } | null)?.id ?? null);
     setSalvando(false);
     onCriada();
+  }
+
+  const veiculoSel = veiculos.find((v) => v.id === veiculoId);
+  const escoposDoModelo = veiculoSel ? escopos.filter((e) => e.modelo === veiculoSel.modelo) : [];
+  const marco = paraInteiro(revisaoKm);
+  const servicos = itensDoMarco(escoposDoModelo, marco);
+  const regras = regrasDoMarco(escoposDoModelo, marco);
+
+  // Trocar de veículo propõe o marco dele. Proposta, não imposição: quem abre
+  // pode estar antecipando a revisão dos 60 mil no veículo que está com 52.
+  function escolherVeiculo(id: string) {
+    setVeiculoId(id);
+    const v = veiculos.find((x) => x.id === id);
+    const sugerido = marcoSugerido(v?.proxima_revisao_km, v?.km_atual);
+    setRevisaoKm(sugerido ? String(sugerido) : "");
   }
 
   return (
@@ -467,7 +503,7 @@ function NovaManutencao({
 
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           <Campo rotulo="Veículo *">
-            <Select value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)}>
+            <Select value={veiculoId} onChange={(e) => escolherVeiculo(e.target.value)}>
               <option value="">Selecione…</option>
               {veiculos.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -527,6 +563,63 @@ function NovaManutencao({
             onValor={setOrcamento}
           />
         </div>
+
+        {/* O escopo aparece ANTES de abrir, e não só no papel impresso: quem
+            abre confere se o plano do modelo bate com o que vai mandar fazer, e
+            corrige o marco se estiver antecipando a revisão. Depois de impresso,
+            discutir a lista com a oficina custa uma viagem. */}
+        {tipo === "PREVENTIVA" && (
+          <div className="mt-2.5 rounded-lg bg-brand-50/70 p-3.5 ring-1 ring-inset ring-brand-200">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              <CampoNumero
+                rotulo="Revisão de quantos km"
+                unidade="km"
+                valor={revisaoKm}
+                onValor={setRevisaoKm}
+                dica={
+                  veiculoSel?.proxima_revisao_km
+                    ? `Próxima revisão deste veículo: ${emKm(veiculoSel.proxima_revisao_km)}.`
+                    : "Define o escopo que a oficina vai seguir."
+                }
+              />
+              <div className="sm:col-span-2">
+                <span className="rotulo">Escopo do {veiculoSel?.modelo ?? "modelo"}</span>
+                {escoposDoModelo.length === 0 ? (
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-slate-600">
+                    Nenhum escopo cadastrado para este modelo. A ordem de serviço sai sem lista
+                    de serviços —{" "}
+                    <BotaoLink href="/escopos" tamanho="sm">
+                      cadastrar agora
+                    </BotaoLink>
+                  </p>
+                ) : servicos.length === 0 ? (
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-slate-600">
+                    {marco
+                      ? `Nenhuma regra do ${veiculoSel?.modelo} cai em ${emKm(marco)}. As regras cadastradas são de ${escoposDoModelo
+                          .map((e) => emKm(e.km_intervalo))
+                          .join(", ")}.`
+                      : "Informe o km da revisão para ver o que a oficina deve fazer."}
+                  </p>
+                ) : (
+                  <>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {servicos.map((i) => (
+                        <Badge key={i} tom="info">
+                          {i}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[11.5px] text-slate-500">
+                      {servicos.length} serviço(s), das regras de{" "}
+                      {regras.map((r) => emKm(r.km_intervalo)).join(", ")}. Vai impresso na ordem
+                      de serviço.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <Campo rotulo="Problema *" className="mt-2.5">
           <Input

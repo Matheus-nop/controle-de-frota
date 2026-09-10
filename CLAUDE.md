@@ -46,5 +46,7 @@ mesmo dia. Mudou lá, muda aqui.
 - [x] Fase 4 — PWA de campo
 - [~] Fase 5 — automações (km automático, bloqueio por checklist, alertas ativos)
 - [~] Fase 6 — papéis PCM e ponto, km alto com conferência, ordem de serviço
+- [~] Fase 7 — avarias em lista, alerta de avaria nova, comparativo de vistorias
+      e escopo de manutenção por modelo
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.

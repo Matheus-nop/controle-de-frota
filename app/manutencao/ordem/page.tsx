@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Botao, BotaoLink, Carregando } from "@/components/ui";
 import { emKm, emReais } from "@/lib/frota/numero";
+import { itensDoMarco, regrasDoMarco, type Escopo } from "@/lib/frota/escopo";
 
 // Ordem de serviço para imprimir e entregar ao técnico.
 //
@@ -35,6 +36,7 @@ type Manut = {
   orcamento: number | null;
   status: string;
   proxima_revisao_km: number | null;
+  revisao_km: number | null;
   veiculo: Veic | Veic[] | null;
   responsavel: { nome: string } | { nome: string }[] | null;
 };
@@ -98,6 +100,7 @@ function Ordem() {
   const params = useSearchParams();
   const id = params.get("id");
   const [m, setM] = useState<Manut | null>(null);
+  const [escopos, setEscopos] = useState<Escopo[]>([]);
   const [estado, setEstado] = useState<"carregando" | "ok" | "vazio">("carregando");
 
   useEffect(() => {
@@ -115,8 +118,23 @@ function Ordem() {
         )
         .eq("id", id)
         .maybeSingle();
-      setM((data as Manut) ?? null);
+      const manut = (data as Manut) ?? null;
+      setM(manut);
       setEstado(data ? "ok" : "vazio");
+
+      // O escopo é montado na hora, a partir do modelo e do marco — não foi
+      // copiado para a manutenção. É a regra do projeto: nada de derivado
+      // gravado, uma fonte de verdade só. Reimprimir uma ordem depois de o
+      // plano mudar mostra o plano de agora, que é o que a oficina deve seguir.
+      const modelo = (Array.isArray(manut?.veiculo) ? manut?.veiculo[0] : manut?.veiculo)?.modelo;
+      if (modelo) {
+        const { data: esc } = await supabase
+          .from("escopos_manutencao")
+          .select("*")
+          .eq("modelo", modelo)
+          .eq("ativo", true);
+        setEscopos((esc as Escopo[]) ?? []);
+      }
     })();
   }, [id]);
 
@@ -137,6 +155,8 @@ function Ordem() {
   }
 
   const v = one(m.veiculo);
+  const servicos = itensDoMarco(escopos, m.revisao_km);
+  const regras = regrasDoMarco(escopos, m.revisao_km);
   const resp = one(m.responsavel);
   const programada = m.origem === "PREVENTIVA PROGRAMADA" || m.tipo === "PREVENTIVA";
 
@@ -197,6 +217,27 @@ function Ordem() {
         <Bloco titulo="O que fazer">
           <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed">{m.descricao_problema}</p>
         </Bloco>
+
+        {/* O escopo da revisão. É o pedido da equipe: "sigam aquele escopo, que
+            será descrito na OS". Vem com caixa para marcar, porque papel que a
+            oficina devolve marcado é a conferência de que o serviço foi feito —
+            e é o que o PCM lança depois em Serviços realizados. */}
+        {servicos.length > 0 && (
+          <Bloco titulo={`Escopo da revisão de ${nkm(m.revisao_km)} — ${v?.modelo ?? ""}`}>
+            <ul className="grid grid-cols-2 gap-x-[18px] gap-y-2">
+              {servicos.map((i) => (
+                <li key={i} className="flex items-start gap-2 break-inside-avoid">
+                  <span className="mt-[3px] inline-block h-[13px] w-[13px] shrink-0 border border-slate-500" />
+                  <span className="text-[13.5px] leading-snug">{i}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2.5 text-[10.5px] text-slate-500">
+              Plano do modelo {v?.modelo}, regras de{" "}
+              {regras.map((r) => nkm(r.km_intervalo)).join(", ")}. Marque o que foi executado.
+            </p>
+          </Bloco>
+        )}
 
         <Bloco titulo="Para a oficina preencher">
           <div className="grid grid-cols-2 gap-x-[18px] gap-y-3">
