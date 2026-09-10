@@ -34,7 +34,7 @@ import {
 // Bongo com o mesmo plano digitado três vezes é uma chance em três de sair
 // diferente.
 
-type Veiculo = { placa: string; modelo: string };
+type Veiculo = { placa: string; modelo: string; ano: string | null };
 
 /** Os marcos que a prévia simula. Cobre o ciclo de vida da frota sem virar uma
  *  tabela infinita — o que interessa é ver o padrão, não todos os números. */
@@ -43,7 +43,7 @@ const MARCOS_PREVIA = [10000, 20000, 30000, 40000, 50000, 60000, 80000, 100000];
 export default function EscoposPage() {
   const [escopos, setEscopos] = useState<Escopo[]>([]);
   const [modelos, setModelos] = useState<string[]>([]);
-  const [placasPorModelo, setPlacasPorModelo] = useState<Record<string, string[]>>({});
+  const [veiculosPorModelo, setVeiculosPorModelo] = useState<Record<string, Veiculo[]>>({});
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [apagar, setApagar] = useState<Escopo | null>(null);
@@ -54,18 +54,18 @@ export default function EscoposPage() {
     await supabase.auth.getUser();
     const [e, v] = await Promise.all([
       supabase.from("escopos_manutencao").select("*").order("modelo").order("km_intervalo"),
-      supabase.from("veiculos").select("placa, modelo").neq("status", "VENDIDO").order("placa"),
+      supabase.from("veiculos").select("placa, modelo, ano").neq("status", "VENDIDO").order("placa"),
     ]);
     setEscopos((e.data as Escopo[]) ?? []);
 
     // Os modelos vêm da frota, não de um texto livre: escopo cadastrado para
     // "FIORINO " com espaço no fim nunca casaria com veículo nenhum.
     const veiculos = (v.data as Veiculo[]) ?? [];
-    const porModelo: Record<string, string[]> = {};
+    const porModelo: Record<string, Veiculo[]> = {};
     for (const x of veiculos) {
-      (porModelo[x.modelo] ??= []).push(x.placa);
+      (porModelo[x.modelo] ??= []).push(x);
     }
-    setPlacasPorModelo(porModelo);
+    setVeiculosPorModelo(porModelo);
     setModelos(Object.keys(porModelo).sort());
     setCarregando(false);
   }, []);
@@ -118,7 +118,7 @@ export default function EscoposPage() {
             <BlocoModelo
               key={m}
               modelo={m}
-              placas={placasPorModelo[m] ?? []}
+              veiculos={veiculosPorModelo[m] ?? []}
               regras={escopos.filter((e) => e.modelo === m)}
               onMudou={carregar}
               onApagar={setApagar}
@@ -150,13 +150,13 @@ export default function EscoposPage() {
 
 function BlocoModelo({
   modelo,
-  placas,
+  veiculos,
   regras,
   onMudou,
   onApagar,
 }: {
   modelo: string;
-  placas: string[];
+  veiculos: Veiculo[];
   regras: Escopo[];
   onMudou: () => void;
   onApagar: (e: Escopo) => void;
@@ -216,8 +216,13 @@ function BlocoModelo({
       titulo={
         <span className="flex flex-wrap items-center gap-2">
           {modelo}
+          {/* O ano vai junto porque a frota tem modelo que se divide por ano: o
+              Bongo mudou de intervalo de revisão a partir de 2026 (10.000 km
+              até MY2025, 15.000 daí em diante), e sem o ano na tela a separação
+              em dois blocos parece engano de cadastro — e alguém "conserta"
+              juntando de volta. */}
           <span className="text-[11.5px] font-normal text-slate-500">
-            {placas.join(" · ")}
+            {veiculos.map((v) => `${v.placa}${v.ano ? ` (${v.ano})` : ""}`).join(" · ")}
           </span>
         </span>
       }

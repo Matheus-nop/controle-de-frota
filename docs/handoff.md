@@ -502,6 +502,58 @@ hora, a partir do modelo e desse número. É a regra do projeto sobre não grava
 derivado, e tem uma consequência que vale saber: reimprimir uma ordem depois de o
 plano mudar mostra o plano de agora.
 
+### O Bongo 2025/2026 tem plano próprio (feito, 2026-09-10)
+Pesquisando o plano dos fabricantes para preencher os escopos, apareceu um
+problema na frota, e não na tabela: **os três Kia Bongo não seguem o mesmo
+plano**. A Kia esticou o intervalo a partir do ano-modelo 2026.
+
+| placa | responsável | ano | intervalo |
+|---|---|---|---|
+| TTB0J08 | Igor | 2024/2025 | 10.000 km |
+| TTX1H09 | Alexandre | 2024/2025 | 10.000 km |
+| TTZ7I26 | Rafael | **2025/2026** | **15.000 km** |
+
+Fonte: kia.com.br/revisoes e o anúncio do Bongo K2500 4x4 2025/2026.
+
+O escopo é por modelo, e os três estavam como "KIA BONGO" — os três leriam o
+mesmo plano. Ou o do Rafael iria à oficina 50% mais vezes do que o fabricante
+manda, ou os outros dois iriam de menos, e "de menos" em revisão é garantia
+perdida.
+
+**A migração 0016 renomeia o do Rafael para `KIA BONGO 2026`.** O modelo é a
+chave do escopo; separar resolve sem mexer no schema e deixa a diferença visível
+na tela em vez de escondida numa exceção. A tela de escopo passou a mostrar o ANO
+de cada veículo ao lado da placa, para que dois blocos "KIA BONGO" não pareçam
+engano de cadastro — sem isso alguém junta de volta.
+
+A alternativa, escopo com exceção por placa, foi descartada quando o escopo foi
+desenhado (não havia caso real) e **vale reabrir se aparecer um segundo caso**.
+
+**Veículo novo do mesmo tipo:** cadastre com o nome do modelo que corresponde ao
+plano dele, não ao que está escrito no documento. Bongo 2026 ou mais novo é
+`KIA BONGO 2026`.
+
+### Escopos ainda por preencher
+Os intervalos foram levantados; **as listas de serviço não**. A Kia manda
+consultar o Manual de Garantia e Manutenção para saber os itens de cada revisão,
+e os manuais da Fiat em PDF recusam acesso automatizado. Deduzir item de revisão
+a partir de site de oficina produziria uma tabela plausível e errada — que iria
+impressa na OS, para a oficina seguir, em freio e correia.
+
+Intervalos levantados, para conferir contra o manual:
+
+| modelo | intervalo | confiança |
+|---|---|---|
+| KIA BONGO até MY2025 | 10.000 km / 12 meses | montadora |
+| KIA BONGO 2026 | 15.000 km / 12 meses | montadora |
+| FIORINO flex | 10.000 km / 12 meses | terceiros |
+| FIORINO diesel | 20.000 km / 12 meses | terceiros |
+| VW DELIVERY 9.170 | amaciamento 1.000–5.000 km, depois 20.000 km | terceiros |
+| STRADA, SCUDO | não levantado | — |
+
+O caminho combinado: o PCM tira foto das páginas do plano de manutenção dos
+manuais (estão na porta-luvas; a concessionária tem todos) e elas viram SQL.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
