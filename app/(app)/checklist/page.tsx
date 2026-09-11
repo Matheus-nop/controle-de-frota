@@ -7,6 +7,7 @@ import { avariasDe, resumoDaAvaria, type Avaria } from "@/lib/frota/avarias";
 import { emKm, paraInteiro } from "@/lib/frota/numero";
 import { dataBR, hojeBR } from "@/lib/frota/tempo";
 import { enviarFoto, enviarFotos } from "@/lib/frota/foto";
+import { mensagemDeErro } from "@/lib/frota/erro";
 import {
   Aviso,
   Badge,
@@ -206,6 +207,11 @@ export default function ChecklistPage() {
   const [fotosAngulo, setFotosAngulo] = useState<Record<string, File | null>>({});
 
   const [salvando, setSalvando] = useState(false);
+  // Quantas fotos já subiram. Envio de cinco fotos num 4G fraco demora, e botão
+  // parado escrito "Enviando…" faz o técnico achar que travou e recarregar a
+  // página no meio — perdendo o formulário inteiro.
+  const [enviadas, setEnviadas] = useState(0);
+  const [totalFotos, setTotalFotos] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
 
@@ -315,42 +321,58 @@ export default function ChecklistPage() {
     }
 
     setSalvando(true);
+    const doBloqueio = apto === "NÃO" ? fotoBloqueio : [];
+    setEnviadas(0);
+    setTotalFotos(
+      ANGULOS.filter(([chave]) => fotosAngulo[chave]).length +
+        doBloqueio.length +
+        listaAvarias.reduce((n, a) => n + a.fotos.length, 0),
+    );
+    const contar = () => setEnviadas((n) => n + 1);
     try {
       const supabase = createClient();
       // Cada ângulo sobe no próprio caminho, e o nome do arquivo no Storage já
       // diz qual é — quem for olhar o balde por fora entende sem consultar nada.
-      const enviadas = await Promise.all(
-        ANGULOS.map(async ([chave]) => ({
-          chave,
-          url: await enviarFoto(supabase, "checklists", `${veiculoId}/${chave}`, fotosAngulo[chave]),
-        })),
-      );
+      //
+      // Uma foto de cada vez, e não as cinco de uma: foi o envio simultâneo que
+      // derrubou o primeiro checklist guiado do campo com "Failed to fetch".
+      // Cinco fotos de celular somam dezenas de MB, e em fila cada uma tem a
+      // banda inteira — além de o contador andar na tela enquanto isso.
+      const subidas: { chave: string; url: string | null }[] = [];
+      for (const [chave] of ANGULOS) {
+        const arquivo = fotosAngulo[chave];
+        const url = await enviarFoto(supabase, "checklists", `${veiculoId}/${chave}`, arquivo);
+        if (arquivo) contar();
+        subidas.push({ chave, url });
+      }
       const fBloqueio = await enviarFotos(
         supabase,
         "checklists",
         `${veiculoId}/bloqueio`,
-        apto === "NÃO" ? fotoBloqueio : [],
+        doBloqueio,
+        contar,
       );
 
       // `fotos_semanais` continua sendo a lista achatada, na ordem dos ângulos:
       // é o que o histórico, o comparativo e a reclassificação já leem. O mapa
       // `angulos` vem ao lado, só para dar nome a cada uma — assim nada quebra
       // e a informação nova não se perde.
-      const fSemanais = enviadas.map((e) => e.url).filter((u): u is string => !!u);
+      const fSemanais = subidas.map((e) => e.url).filter((u): u is string => !!u);
       const angulos: Record<string, string> = {};
-      for (const e of enviadas) if (e.url) angulos[e.url] = e.chave;
+      for (const e of subidas) if (e.url) angulos[e.url] = e.chave;
 
       // Cada avaria sobe as suas fotos no próprio prefixo. O índice entra no
       // caminho para duas avarias da mesma vistoria não se misturarem no balde.
-      const avariasGravadas = await Promise.all(
-        listaAvarias.map(async (a, i) => ({
+      const avariasGravadas = [];
+      for (const [i, a] of listaAvarias.entries()) {
+        avariasGravadas.push({
           onde: a.onde || null,
           tipo: a.tipo || null,
           ja_existia: a.existia || null,
           descricao: a.desc.trim() || null,
-          fotos: await enviarFotos(supabase, "checklists", `${veiculoId}/avaria-${i + 1}`, a.fotos),
-        })),
-      );
+          fotos: await enviarFotos(supabase, "checklists", `${veiculoId}/avaria-${i + 1}`, a.fotos, contar),
+        });
+      }
 
       const itens = {
         usado_por_outro: usadoOutro || null,
@@ -379,7 +401,7 @@ export default function ChecklistPage() {
       if (error) throw error;
       setOk(true);
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro ao salvar o checklist.");
+      setErro(mensagemDeErro(err, "o envio do checklist"));
     } finally {
       setSalvando(false);
     }
@@ -672,7 +694,11 @@ export default function ChecklistPage() {
           </Cartao>
 
           <Botao type="submit" variante="primario" tamanho="lg" disabled={salvando} className="w-full">
-            {salvando ? "Enviando…" : "Enviar checklist"}
+            {salvando
+              ? totalFotos > 0
+                ? `Enviando foto ${Math.min(enviadas + 1, totalFotos)} de ${totalFotos}…`
+                : "Enviando…"
+              : "Enviar checklist"}
           </Botao>
 
           {erro && <Aviso>{erro}</Aviso>}

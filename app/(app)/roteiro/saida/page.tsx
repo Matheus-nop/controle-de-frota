@@ -5,6 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { emKm, paraInteiro } from "@/lib/frota/numero";
 import { enviarFoto } from "@/lib/frota/foto";
+import { mensagemDeErro } from "@/lib/frota/erro";
 import {
   Aviso,
   Botao,
@@ -102,7 +103,7 @@ export default function RegistrarSaidaPage() {
       setOk(true);
       setSalvando(false);
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro ao salvar a saída.");
+      setErro(mensagemDeErro(err, "o registro da saída"));
       setSalvando(false);
     }
   }

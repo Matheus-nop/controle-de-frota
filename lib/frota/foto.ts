@@ -1,4 +1,40 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { reduzirFoto } from "./imagem";
+import { falhaDeRede } from "./erro";
+
+// Quantas vezes insistir quando a conexão cai. Três tentativas cobrem o buraco
+// de sinal na saída do galpão sem deixar o técnico esperando um minuto por uma
+// foto que não vai subir de jeito nenhum.
+const TENTATIVAS = 3;
+
+const espera = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+
+/** Sobe um arquivo, reduzindo a imagem antes e insistindo se a conexão cair.
+ *
+ *  O reenvio usa o MESMO caminho de propósito: se a primeira tentativa chegou
+ *  ao Storage e só a resposta se perdeu, a segunda esbarra no arquivo já
+ *  gravado — e isso é sucesso, não erro. Sem esse cuidado, o reenvio duplicaria
+ *  a foto no balde a cada oscilação de sinal. */
+async function subir(
+  supabase: SupabaseClient,
+  balde: string,
+  caminhoSemExtensao: string,
+  arquivo: File,
+): Promise<string> {
+  const menor = await reduzirFoto(arquivo);
+  const ext = (menor.name.split(".").pop() || "jpg").toLowerCase();
+  const caminho = `${caminhoSemExtensao}.${ext}`;
+
+  for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
+    const { error } = await supabase.storage.from(balde).upload(caminho, menor, { upsert: false });
+    if (!error) break;
+    if (/already exists|duplicate/i.test(error.message)) break; // subiu na tentativa anterior
+    // Recusa do servidor (tamanho, permissão) não melhora insistindo.
+    if (!falhaDeRede(error) || tentativa === TENTATIVAS) throw error;
+    await espera(700 * tentativa);
+  }
+  return supabase.storage.from(balde).getPublicUrl(caminho).data.publicUrl;
+}
 
 /**
  * Sobe uma foto para o Storage e devolve a URL pública.
@@ -19,11 +55,7 @@ export async function enviarFoto(
   arquivo: File | null | undefined,
 ): Promise<string | null> {
   if (!arquivo) return null;
-  const ext = (arquivo.name.split(".").pop() || "jpg").toLowerCase();
-  const caminho = `${prefixo}-${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from(balde).upload(caminho, arquivo);
-  if (error) throw error;
-  return supabase.storage.from(balde).getPublicUrl(caminho).data.publicUrl;
+  return subir(supabase, balde, `${prefixo}-${Date.now()}`, arquivo);
 }
 
 /**
@@ -39,17 +71,17 @@ export async function enviarFotos(
   balde: string,
   prefixo: string,
   arquivos: FileList | File[] | null,
+  aoEnviarCada?: () => void,
 ): Promise<string[]> {
   if (!arquivos || arquivos.length === 0) return [];
   const carimbo = Date.now();
   const urls: string[] = [];
+  // Uma de cada vez, e não todas juntas: num 4G fraco, cinco envios simultâneos
+  // disputam a mesma banda e caem os cinco. Em fila, cada um tem a linha
+  // inteira e o técnico vê o contador andar.
   for (let i = 0; i < arquivos.length; i++) {
-    const f = arquivos[i];
-    const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
-    const caminho = `${prefixo}-${carimbo}-${i}.${ext}`;
-    const { error } = await supabase.storage.from(balde).upload(caminho, f, { upsert: false });
-    if (error) throw error;
-    urls.push(supabase.storage.from(balde).getPublicUrl(caminho).data.publicUrl);
+    urls.push(await subir(supabase, balde, `${prefixo}-${carimbo}-${i}`, arquivos[i]));
+    aoEnviarCada?.();
   }
   return urls;
 }

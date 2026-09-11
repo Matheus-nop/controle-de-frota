@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { paraInteiro } from "@/lib/frota/numero";
 import { diaHoraDe } from "@/lib/frota/tempo";
 import { enviarFoto } from "@/lib/frota/foto";
+import { mensagemDeErro } from "@/lib/frota/erro";
 import {
   Aviso,
   Botao,
@@ -155,7 +156,7 @@ export default function RegistrarChegadaPage() {
     try {
       fotoUrl = await enviarFoto(supabase, "roteiros", `${sel.id}/chegada`, foto?.[0]);
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro ao enviar a foto.");
+      setErro(mensagemDeErro(err, "o registro da chegada"));
       setSalvando(false);
       return;
     }
