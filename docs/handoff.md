@@ -895,6 +895,37 @@ schema real, e os 13 marcos que ela imprime (10 itens aos 10.000, 19 aos 60.000,
 23 aos 120.000…) batem item a item com `itensDoMarco` em TypeScript — 19 provas.
 Se as duas divergirem, a tela mostra um escopo e o papel imprime outro.
 
+### O plano do Scudo, do manual (feito, 2026-09-11) — migração **0021**
+Páginas G-12 e G-13, revisões 01ª a 12ª. Sete regras, 22 serviços.
+
+**A base é 20.000 km, e não 10.000.** É a diferença que mais importa entre este
+plano e o da Fiorino, e a que confunde quem for conferir contra o papel: a
+coluna "01ª" do manual do Scudo é o marco de **20.000 km**, a "02ª" é 40.000, e
+as doze revisões do livro cobrem 240.000 km.
+
+**Três padrões que o `km_inicio` da 0020 já resolvia:**
+- **carroceria** só entra da 2ª revisão em diante (40.000 km) — veículo com
+  20.000 km ainda não tem corrosão para olhar;
+- **correias dos órgãos auxiliares**: olhadas na 2ª, 5ª, 8ª e 11ª, trocadas na
+  3ª, 6ª, 9ª e 12ª — de novo a verificação 20.000 km antes de cada troca, como
+  na correia dentada da Fiorino. Parece ser convenção da Fiat;
+- **correia dentada**: olhada nas revisões pares (40.000 em 40.000), trocada a
+  cada 120.000.
+
+**O diesel avisa antes.** O manual registra que alguns modelos monitoram a
+degradação do óleo e acendem luz no painel; quando acende, óleo e filtro saem na
+hora, sem esperar o km. Está na observação da regra de 20.000.
+
+**O (****) do manual vale ouro e foi para a observação:** se na verificação da
+correia dentada aparecer contaminante mineral nos rolamentos e polias, isso é
+*indicação de que o veículo roda em estrada poeirenta* — ou seja, o plano
+inteiro passa a valer pela metade. É um teste objetivo para a decisão de uso
+severo, que hoje é palpite.
+
+**Provado nas duas linguagens**, como a Fiorino: a 0021 rodou duas vezes num
+Postgres com o schema real, e os 9 marcos conferidos batem com `itensDoMarco` em
+TypeScript — 13 provas, incluindo cada um dos três padrões acima.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
