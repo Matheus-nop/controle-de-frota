@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowRight, Camera, GitCompareArrows } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { avariasDe, resumoDaAvaria, urls, type Avaria } from "@/lib/frota/avarias";
+import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
 import { dataBR } from "@/lib/frota/tempo";
 import { emKm } from "@/lib/frota/numero";
 import {
@@ -100,6 +101,9 @@ function Coluna({
                   {a.reclassificada_por && (
                     <Badge tom="mudo">reclassificada por {a.reclassificada_por}</Badge>
                   )}
+                  {/* E foto que chegou depois da vistoria é outra coisa ainda:
+                      ali nem a foto existia no dia. */}
+                  {a.anexada_por && <Badge tom="mudo">anexada por {a.anexada_por}</Badge>}
                   {a.ja_existia && (
                     <span className="text-[11px] text-slate-500">disse: {a.ja_existia}</span>
                   )}
@@ -178,12 +182,21 @@ function Comparativo() {
     if (!veiculoId) return;
     setCarregando(true);
     const supabase = createClient();
-    const { data } = await supabase
-      .from("checklists")
-      .select("id, data, km_atual, apto, motivo_bloqueio, itens, tecnico:tecnico_id(nome)")
-      .eq("veiculo_id", veiculoId)
-      .order("data", { ascending: false })
-      .limit(30);
+    // Anulada não entra na comparação: comparar com uma vistoria que o gestor já
+    // disse estar errada é fabricar diferença que não existiu. Antes da 0017 a
+    // coluna não existe, e aí a consulta vai sem o filtro.
+    const buscar = (comAnulacao: boolean) => {
+      const q = supabase
+        .from("checklists")
+        .select("id, data, km_atual, apto, motivo_bloqueio, itens, tecnico:tecnico_id(nome)")
+        .eq("veiculo_id", veiculoId);
+      return (comAnulacao ? q.is("anulada_em", null) : q)
+        .order("data", { ascending: false })
+        .limit(30);
+    };
+    let resposta = await buscar(true);
+    if (faltaMigracaoDaAnulacao(resposta.error)) resposta = await buscar(false);
+    const { data } = resposta;
 
     /* eslint-disable @typescript-eslint/no-explicit-any */
     const lista: Vistoria[] = ((data as any[]) ?? []).map((c) => {

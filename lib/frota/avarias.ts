@@ -32,7 +32,29 @@ export type Avaria = {
    *  valem a mesma coisa numa discussão sobre quando o dano apareceu. */
   reclassificada_por: string | null;
   reclassificada_em: string | null;
+  /** Preenchidos quando a avaria nasceu de foto que o GESTOR anexou — o
+   *  técnico ficou sem bateria, sem sinal, e mandou as fotos por fora. É outra
+   *  coisa de `reclassificada_*`: ali a foto foi tirada na vistoria e só a
+   *  classificação mudou; aqui a foto entrou depois, por outra pessoa. */
+  anexada_por: string | null;
+  anexada_em: string | null;
 };
+
+/**
+ * As opções de "onde" e "tipo" do formulário de avaria.
+ *
+ * Uma lista só para as três telas que perguntam isso — o técnico ao registrar,
+ * o gestor ao reclassificar e ao anexar — e para o filtro do histórico. Se
+ * divergirem, o filtro passa a oferecer valores que nunca casam com o que foi
+ * gravado, e a pergunta "quantas vezes a traseira desta Strada apareceu
+ * amassada?" começa a responder zero por motivo errado.
+ */
+export const AVARIA_ONDE = [
+  "FRENTE", "TRASEIRA", "LATERAL DIREITA", "LATERAL ESQUERDA", "INTERIOR", "RODAS/PNEUS", "OUTRO",
+];
+export const AVARIA_TIPO = [
+  "AMASSADO", "ARRANHÃO", "QUEBRA", "LANTERNA/FAROL", "PNEU", "RETROVISOR", "OUTRO",
+];
 
 /** Só o que parece endereço de foto. O jsonb é livre e já passou por versões
  *  diferentes do formulário — o que não for URL não vira `<img src>`. */
@@ -56,6 +78,8 @@ function uma(v: unknown): Avaria | null {
     fotos: urls(o.fotos),
     reclassificada_por: texto(o.reclassificada_por),
     reclassificada_em: texto(o.reclassificada_em),
+    anexada_por: texto(o.anexada_por),
+    anexada_em: texto(o.anexada_em),
   };
   // Objeto vazio não é avaria. O formulário antigo gravava `avaria: {}` quando
   // alguém marcava SIM e voltava atrás sem preencher nada.
@@ -116,9 +140,12 @@ export function resumoDaAvaria(a: Avaria): string {
 
 /** Objeto solto para gravar no jsonb. Não usa `Avaria` porque o jsonb guarda
  *  só o que foi preenchido — campo nulo não vira chave. */
-type AvariaGravada = Record<string, unknown>;
+export type AvariaGravada = Record<string, unknown>;
 
-function listaDeAvarias(itens: Record<string, unknown>): AvariaGravada[] {
+/** A lista de avarias pronta para reescrever, em CÓPIA. Exportada porque
+ *  `lib/frota/anexo.ts` grava no mesmo lugar — duas versões desta conversão
+ *  divergiriam na primeira mudança de formato. */
+export function listaDeAvariasParaGravar(itens: Record<string, unknown>): AvariaGravada[] {
   // CÓPIA, e não a lista de dentro. Devolver a referência original fazia o
   // `push` da reclassificação escrever no objeto que veio de fora: reclassificar
   // duas fotos em seguida deixava a primeira versão com a avaria da segunda, e
@@ -153,7 +180,7 @@ export function reclassificarComoAvaria(
   const escolhidas = fotosEscolhidas.filter((u) => semanais.includes(u));
   if (escolhidas.length === 0) return base;
 
-  const avarias = listaDeAvarias(base);
+  const avarias = listaDeAvariasParaGravar(base);
   avarias.push({
     onde: dados.onde || null,
     tipo: dados.tipo || null,
@@ -185,7 +212,7 @@ export function desfazerReclassificacao(itens: unknown, indice: number): Record<
     string,
     unknown
   >;
-  const avarias = listaDeAvarias(base);
+  const avarias = listaDeAvariasParaGravar(base);
   const alvo = avarias[indice];
   if (!alvo || !texto(alvo.reclassificada_por)) return base;
 

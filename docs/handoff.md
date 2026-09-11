@@ -634,6 +634,71 @@ semanais lado a lado sem alinhar por ângulo — com o mapa, dá para alinhar.
 em vez de "as fotos são obrigatórias", que faz a pessoa reler o formulário
 inteiro procurando o que esqueceu. As cinco são exigidas.
 
+### "Failed to fetch" no checklist (feito, 2026-09-11)
+O primeiro checklist guiado enviado do campo falhou com `Failed to fetch`.
+
+**Não era o técnico nem o banco.** Celular tira foto de 4032x3024 com ~11 MB, o
+formulário guiado pede cinco, e as cinco subiam **ao mesmo tempo** — 57 MB
+disputando a mesma banda de 4G, na rua. A conexão cai no meio e o navegador
+chama isso de "Failed to fetch".
+
+O defeito nasceu do conserto anterior: enquanto o técnico só conseguia anexar
+**uma** foto, o envio nunca passava de 11 MB. Destravar as cinco expôs isto.
+
+- **`lib/frota/imagem.ts`** reduz a foto antes de subir (1600 px, JPEG 0,72,
+  respeitando a orientação do EXIF). Medido no navegador: 11.435 KB -> 600 KB;
+  as cinco da vistoria, 57 MB -> 3 MB. PDF, GIF e foto já pequena passam
+  intactos, e qualquer tropeço devolve o arquivo original.
+- **`lib/frota/foto.ts`** envia em fila, não em paralelo, e reenvia até 3 vezes
+  quando a conexão cai — pelo **mesmo caminho** no Storage, porque se a primeira
+  chegou e só a resposta se perdeu, a segunda esbarra no arquivo já gravado e
+  isso é sucesso. Recusa do servidor (413, permissão) falha de primeira.
+- **`lib/frota/erro.ts`** traduz a falha: "A conexão caiu no meio do envio do
+  checklist. Nada do que você preencheu se perdeu — procure um lugar com sinal e
+  toque em enviar de novo." Vale para ocorrência, saída e chegada também.
+- O botão mostra **"Enviando foto 3 de 5…"**: envio longo com botão parado faz o
+  técnico achar que travou e recarregar a página no meio.
+
+### Excluir vistoria e anexar foto pelo gestor (feito, 2026-09-11)
+Dois pedidos do gestor, e a migração **0017**.
+
+**Excluir é anular.** A vistoria sai do histórico, do comparativo, do último
+checklist que o técnico vê e do alerta de avaria nova — e continua guardada, com
+`anulada_em`, `anulada_por` (FK para `tecnicos`) e `motivo_anulacao`. Para quem
+usa, foi excluída; para o banco, é reversível em "Ver anuladas".
+
+Por que não `delete`: vistoria é prova, e duas vistorias do mesmo veículo no
+mesmo dia é o caso normal, não o raro. Excluir a linha errada de verdade levaria
+as fotos junto, sem volta. A policy `checklists_delete` continua existindo desde
+a 0004 — o app é que deixou de usá-la.
+
+**Anexar foto** (`lib/frota/anexo.ts`) é para quando o técnico não conseguiu
+enviar na hora: o celular ficou sem espaço, a foto saiu preta, ele mandou por
+fora. A foto entra na vistoria dele, na data dela, e fica **marcada**:
+`itens.anexos` é o mapa `{ url: { por, em } }` de tudo que não veio do
+formulário. Pode entrar como foto do veículo (com ângulo) ou já como avaria.
+Refazer a vistoria seria pior — inventaria uma vistoria que não aconteceu, com a
+data e o km de hoje.
+
+Só sai o que o gestor anexou. Foto que o técnico mandou não se apaga por aqui.
+
+**Três marcas diferentes, de propósito**: "o técnico registrou na rua", "o gestor
+reclassificou depois" e "o gestor anexou depois" não valem a mesma coisa numa
+discussão sobre quando o dano apareceu, e as três telas mostram qual é qual.
+
+**`components/vistoria.tsx`** reúne as três correções (reclassificar, anexar,
+excluir). Saíram de `/historico`, que já passava de mil linhas.
+
+**Dois cuidados que custaram teste para descobrir:**
+- **UPDATE barrado pela RLS não volta com erro.** As linhas simplesmente não
+  existem para quem não pode alterá-las: o Postgres responde `UPDATE 0`, sem
+  reclamar. Sem o `.select("id")` no fim, o PCM clicaria em excluir, o modal
+  fecharia satisfeito e nada teria acontecido. Provado num PG local.
+- **A migração é aplicada à mão, o deploy não espera por ela.** Entre um e
+  outro, toda consulta que pedisse `anulada_em` quebraria — inclusive a do
+  técnico. `lib/frota/anulacao.ts` detecta a coluna ausente e refaz a consulta
+  sem ela: o recurso novo não aparece, e nada mais quebra.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`

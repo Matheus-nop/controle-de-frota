@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/frota/tempo";
 import { enviarFotos } from "@/lib/frota/foto";
+import { mensagemDeErro } from "@/lib/frota/erro";
 import {
   Aviso,
   Botao,
@@ -138,7 +139,7 @@ export default function OcorrenciaPage() {
       if (error) throw error;
       setOk(true);
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro ao registrar a ocorrência.");
+      setErro(mensagemDeErro(err, "o registro da ocorrência"));
     } finally {
       setSalvando(false);
     }

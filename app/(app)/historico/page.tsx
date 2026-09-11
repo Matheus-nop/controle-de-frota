@@ -5,21 +5,27 @@ import {
   AlertTriangle,
   ClipboardCheck,
   ImageOff,
+  ImagePlus,
+  RotateCcw,
+  Trash2,
   Truck,
-  Undo2,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { diaDe, intervaloUTC, periodoPadrao } from "@/lib/frota/tempo";
+import { legendaDoAngulo } from "@/lib/frota/angulos";
+import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
+import { fotoAnexada } from "@/lib/frota/anexo";
+import { mensagemDeErro } from "@/lib/frota/erro";
+import { diaDe, diaHoraDe, intervaloUTC, periodoPadrao } from "@/lib/frota/tempo";
 import { emKm } from "@/lib/frota/numero";
+import { avariasDe, resumoDaAvaria, urls, type Avaria } from "@/lib/frota/avarias";
 import {
-  avariasDe,
-  desfazerReclassificacao,
-  reclassificarComoAvaria,
-  resumoDaAvaria,
-  urls,
-  type Avaria,
-} from "@/lib/frota/avarias";
+  AnexarFotos,
+  ExcluirVistoria,
+  ReclassificarFotos,
+  type FotoDaVistoria,
+  type Vistoria,
+} from "@/components/vistoria";
 import {
   Aviso,
   Badge,
@@ -31,7 +37,6 @@ import {
   Input,
   Pagina,
   Placa,
-  Modal,
   Select,
   Vazio,
   cx,
@@ -44,7 +49,7 @@ import {
 
 type Veiculo = { id: string; placa: string; modelo: string };
 
-type Foto = { url: string; legenda: string; semanal?: boolean };
+type Foto = FotoDaVistoria;
 
 type Registro = {
   id: string;
@@ -62,23 +67,11 @@ type Registro = {
   /** Só no CHECKLIST: o id da linha e o `itens` cru, que a reclassificação
    *  precisa para reescrever. Nos outros tipos fica nulo. */
   checklistId: string | null;
+  veiculoId: string | null;
   itens: unknown;
+  /** Só no CHECKLIST: a vistoria que o gestor tirou do ar. */
+  anulada: { por: string | null; em: string; motivo: string | null } | null;
 };
-
-// As mesmas opções do formulário do técnico. Se divergirem, o filtro por
-// onde/tipo passa a ter valores que nunca casam entre si.
-const AVARIA_ONDE = ["FRENTE", "TRASEIRA", "LATERAL DIREITA", "LATERAL ESQUERDA", "INTERIOR", "RODAS/PNEUS", "OUTRO"];
-const AVARIA_TIPO = ["AMASSADO", "ARRANHÃO", "QUEBRA", "LANTERNA/FAROL", "PNEU", "RETROVISOR", "OUTRO"];
-
-/** O nome do ângulo de uma foto, quando a vistoria guardou. O mapa é
- *  `{ url: "lateral_esquerda" }`; aqui vira "lateral esquerda". */
-function rotuloDoAngulo(mapa: unknown, url: string): string {
-  const chave =
-    mapa && typeof mapa === "object"
-      ? (mapa as Record<string, unknown>)[url]
-      : undefined;
-  return typeof chave === "string" && chave ? chave.replace(/_/g, " ") : "semanal";
-}
 
 const TOM_TIPO: Record<string, Tom> = {
   CHECKLIST: "info",
@@ -108,6 +101,9 @@ export default function HistoricoPage() {
   // Quem assina a reclassificação. Sai da mesma consulta que o resto do app usa
   // para saber o papel — `tecnicos` pelo `user_id` do login.
   const [quem, setQuem] = useState<string | null>(null);
+  // O id, além do nome: `anulada_por` é FK para tecnicos, como todo nome de
+  // pessoa neste sistema.
+  const [quemId, setQuemId] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
 
   const [veiculoId, setVeiculoId] = useState("");
@@ -120,6 +116,12 @@ export default function HistoricoPage() {
   // desta Strada já apareceu amassada?" — e que antes exigia abrir vistoria por
   // vistoria.
   const [soComAvaria, setSoComAvaria] = useState(false);
+  // As anuladas ficam escondidas: para quem usa, elas foram excluídas. Este é o
+  // caminho de volta, para o dia em que o gestor anular a vistoria errada.
+  const [verAnuladas, setVerAnuladas] = useState(false);
+  // Enquanto a 0017 não rodar, excluir vistoria não existe — e a tela diz isso,
+  // em vez de oferecer um botão que devolve erro.
+  const [faltaMigracao, setFaltaMigracao] = useState(false);
   const [avOnde, setAvOnde] = useState("");
   const [avTipo, setAvTipo] = useState("");
 
@@ -136,10 +138,12 @@ export default function HistoricoPage() {
       if (sessao?.user) {
         const { data: eu } = await supabase
           .from("tecnicos")
-          .select("nome")
+          .select("id, nome")
           .eq("user_id", sessao.user.id)
           .maybeSingle();
-        setQuem((eu as { nome: string | null } | null)?.nome ?? sessao.user.email ?? null);
+        const pessoa = eu as { id: string; nome: string | null } | null;
+        setQuem(pessoa?.nome ?? sessao.user.email ?? null);
+        setQuemId(pessoa?.id ?? null);
       }
 
       const placa = new URLSearchParams(window.location.search).get("placa");
@@ -152,13 +156,25 @@ export default function HistoricoPage() {
 
   const carregar = useCallback(async () => {
     setCarregando(true);
+    let semMigracao = false;
     const supabase = createClient();
 
-    let qChk = supabase
-      .from("checklists")
-      .select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)")
-      .gte("data", de)
-      .lte("data", ate);
+    // Antes da 0017 não há coluna de anulação nem relação `anulada_por`: a
+    // consulta volta a ser a de sempre, e a tela funciona sem o recurso novo em
+    // vez de ficar em branco.
+    const montarChk = (comAnulacao: boolean) => {
+      const q = supabase
+        .from("checklists")
+        .select(
+          comAnulacao
+            ? "*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome), quem_anulou:anulada_por(nome)"
+            : "*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)",
+        )
+        .gte("data", de)
+        .lte("data", ate);
+      const comVeiculo = veiculoId ? q.eq("veiculo_id", veiculoId) : q;
+      return comAnulacao && !verAnuladas ? comVeiculo.is("anulada_em", null) : comVeiculo;
+    };
     // `saida_em` e timestamptz: o recorte precisa ser o dia de Sao Paulo virado
     // em UTC, senao o filtro corta as 21h e some com o roteiro das 22h.
     const janela = intervaloUTC(de, ate);
@@ -174,12 +190,17 @@ export default function HistoricoPage() {
       .lte("data", ate);
 
     if (veiculoId) {
-      qChk = qChk.eq("veiculo_id", veiculoId);
       qRot = qRot.eq("veiculo_id", veiculoId);
       qOco = qOco.eq("veiculo_id", veiculoId);
     }
 
-    const [chk, rot, oco] = await Promise.all([qChk, qRot, qOco]);
+    const [primeiraChk, rot, oco] = await Promise.all([montarChk(true), qRot, qOco]);
+    let chk = primeiraChk;
+    if (faltaMigracaoDaAnulacao(chk.error)) {
+      chk = await montarChk(false);
+      semMigracao = true;
+    }
+    setFaltaMigracao(semMigracao);
     const linhas: Registro[] = [];
 
     /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -196,20 +217,24 @@ export default function HistoricoPage() {
         // antiga não tem o mapa e continua saindo como "semanal".
         ...urls(itens.fotos_semanais).map((u) => ({
           url: u,
-          legenda: rotuloDoAngulo(itens.angulos, u),
+          legenda: legendaDoAngulo(itens, u),
           semanal: true,
+          anexadaPor: fotoAnexada(itens, u)?.por,
         })),
         ...avarias.flatMap((a, i) =>
           a.fotos.map((u) => ({
             url: u,
+            anexadaPor: fotoAnexada(itens, u)?.por,
             // A marca importa: numa discussão sobre quando o dano apareceu,
             // "o técnico registrou na rua" e "o gestor reconheceu depois" não
             // valem a mesma coisa.
             legenda: a.reclassificada_por
               ? "avaria (reclassificada)"
-              : avarias.length > 1
-                ? `avaria ${i + 1}`
-                : "avaria",
+              : a.anexada_por
+                ? "avaria (anexada)"
+                : avarias.length > 1
+                  ? `avaria ${i + 1}`
+                  : "avaria",
           })),
         ),
         ...urls(itens.fotos_bloqueio).map((u) => ({ url: u, legenda: "bloqueio" })),
@@ -238,7 +263,15 @@ export default function HistoricoPage() {
         fotos,
         avarias,
         checklistId: c.id,
+        veiculoId: c.veiculo_id,
         itens,
+        anulada: c.anulada_em
+          ? {
+              por: one(c.quem_anulou as { nome: string } | null)?.nome ?? null,
+              em: c.anulada_em,
+              motivo: c.motivo_anulacao ?? null,
+            }
+          : null,
       });
     }
 
@@ -267,7 +300,9 @@ export default function HistoricoPage() {
         fotos,
         avarias: [],
         checklistId: null,
+        veiculoId: null,
         itens: null,
+        anulada: null,
       });
     }
 
@@ -287,7 +322,9 @@ export default function HistoricoPage() {
         fotos: urls(o.fotos).map((u) => ({ url: u, legenda: "dano" })),
         avarias: [],
         checklistId: null,
+        veiculoId: null,
         itens: null,
+        anulada: null,
       });
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -295,7 +332,7 @@ export default function HistoricoPage() {
     linhas.sort((a, b) => (b.data || "").localeCompare(a.data || ""));
     setRegistros(linhas);
     setCarregando(false);
-  }, [de, ate, veiculoId]);
+  }, [de, ate, veiculoId, verAnuladas]);
 
   useEffect(() => {
     (async () => {
@@ -388,6 +425,16 @@ export default function HistoricoPage() {
             />
             Só com avaria
           </label>
+          {/* Anulada some do histórico por padrão — para quem usa, ela foi
+              excluída. Esta é a porta de volta, e ela precisa existir: o dia em
+              que o gestor anular a vistoria errada é o dia em que ele vem
+              procurar por aqui. */}
+          {!faltaMigracao && (
+            <label className="flex items-center gap-2 text-[12.5px] text-slate-600">
+              <Checkbox checked={verAnuladas} onChange={(e) => setVerAnuladas(e.target.checked)} />
+              Ver anuladas
+            </label>
+          )}
         </div>
 
         {(soComAvaria || filtrandoAvaria) && (
@@ -428,7 +475,14 @@ export default function HistoricoPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {lista.map((r) => (
-            <CartaoRegistro key={r.id} r={r} quem={quem} onMudou={carregar} />
+            <CartaoRegistro
+              key={r.id}
+              r={r}
+              quem={quem}
+              quemId={quemId}
+              podeExcluir={!faltaMigracao}
+              onMudou={carregar}
+            />
           ))}
         </div>
       )}
@@ -436,224 +490,85 @@ export default function HistoricoPage() {
   );
 }
 
-/**
- * O gestor corrige a classificação de uma foto.
- *
- * O caso real: o técnico mandou onze fotos, todas marcadas como "semanal", e
- * várias eram dano — farol quebrado, porta amassada. A vistoria ficou com zero
- * avaria: o alerta não dispara, o comparativo da semana seguinte não tem com o
- * que comparar, e o filtro de avaria não acha nada.
- *
- * Pedir para o técnico refazer não resolve: ele já entregou o veículo e foi
- * para a rua. Quem consegue olhar a foto e dizer "isto é a traseira amassada" é
- * o gestor, depois.
- *
- * A foto não muda e não se apaga nada — muda a classificação, e a mudança fica
- * assinada. Só quem tem papel de gestor chega aqui, porque só ele passa pela
- * policy de update de `checklists`.
- */
-function ReclassificarFotos({
-  r,
-  quem,
-  onFechar,
-  onSalvo,
-}: {
-  r: Registro;
-  quem: string | null;
-  onFechar: () => void;
-  onSalvo: () => void;
-}) {
-  const semanais = r.fotos.filter((f) => f.semanal).map((f) => f.url);
-  const [escolhidas, setEscolhidas] = useState<string[]>([]);
-  const [onde, setOnde] = useState("");
-  const [tipo, setTipo] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
 
-  const reclassificadas = r.avarias
-    .map((a, i) => ({ a, i }))
-    .filter(({ a }) => a.reclassificada_por);
 
-  async function gravar(novoItens: Record<string, unknown>) {
-    if (!r.checklistId) return;
-    setSalvando(true);
-    setErro(null);
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("checklists")
-      .update({ itens: novoItens })
-      .eq("id", r.checklistId);
-    setSalvando(false);
-    if (error) {
-      setErro(
-        error.code === "42501" || error.message.toLowerCase().includes("policy")
-          ? "Só o gestor pode reclassificar foto de vistoria."
-          : error.message,
-      );
-      return;
-    }
-    onSalvo();
-  }
-
-  return (
-    <Modal aberto titulo={`Reclassificar fotos · ${r.placa} · ${dataBR(r.data)}`} onFechar={onFechar}>
-      <div className="space-y-3.5">
-        <p className="text-[13px] leading-relaxed text-slate-600">
-          Escolha as fotos que são avaria e diga o que é. Elas saem das fotos semanais e passam a
-          contar como avaria desta vistoria — e ficam marcadas como reclassificadas por você.
-        </p>
-
-        {semanais.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-[13px] text-slate-500">
-            <ImageOff size={15} />
-            Nenhuma foto semanal sobrando nesta vistoria.
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {semanais.map((u) => {
-                const marcada = escolhidas.includes(u);
-                return (
-                  <button
-                    key={u}
-                    type="button"
-                    onClick={() =>
-                      setEscolhidas((l) => (l.includes(u) ? l.filter((x) => x !== u) : [...l, u]))
-                    }
-                    className={cx(
-                      "relative block rounded-lg ring-2 transition",
-                      marcada ? "ring-amber-500" : "ring-transparent hover:ring-slate-300",
-                    )}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={u}
-                      alt="foto da vistoria"
-                      loading="lazy"
-                      className={cx(
-                        "block h-[84px] w-[84px] rounded-lg object-cover",
-                        !marcada && "opacity-70",
-                      )}
-                    />
-                    {marcada && (
-                      <span className="absolute right-1 top-1 rounded bg-amber-500 px-1 text-[10px] font-bold text-white">
-                        avaria
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <Campo rotulo="Onde?">
-                <Select value={onde} onChange={(e) => setOnde(e.target.value)}>
-                  <option value="">Selecione…</option>
-                  {AVARIA_ONDE.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </Select>
-              </Campo>
-              <Campo rotulo="Tipo de avaria">
-                <Select value={tipo} onChange={(e) => setTipo(e.target.value)}>
-                  <option value="">Selecione…</option>
-                  {AVARIA_TIPO.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </Select>
-              </Campo>
-            </div>
-            <Campo rotulo="Descrição (opcional)">
-              <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} />
-            </Campo>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <Botao
-                variante="primario"
-                disabled={salvando || escolhidas.length === 0 || (!onde && !tipo)}
-                onClick={() =>
-                  gravar(
-                    reclassificarComoAvaria(
-                      r.itens,
-                      escolhidas,
-                      { onde, tipo, descricao: descricao.trim() || null },
-                      quem,
-                    ),
-                  )
-                }
-              >
-                {salvando
-                  ? "Salvando…"
-                  : `Marcar ${escolhidas.length || ""} foto(s) como avaria`.replace("  ", " ")}
-              </Botao>
-              {escolhidas.length > 0 && !onde && !tipo && (
-                <span className="text-[12.5px] text-slate-500">Diga ao menos onde ou o tipo.</span>
-              )}
-            </div>
-          </>
-        )}
-
-        {reclassificadas.length > 0 && (
-          <div className="border-t border-slate-100 pt-3">
-            <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-slate-500">
-              Já reclassificadas por alguém
-            </div>
-            <div className="flex flex-col gap-2">
-              {reclassificadas.map(({ a, i }) => (
-                <div
-                  key={i}
-                  className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-2.5 ring-1 ring-inset ring-amber-200"
-                >
-                  <span className="text-[13px] font-semibold text-slate-800">{resumoDaAvaria(a)}</span>
-                  <span className="text-[11.5px] text-slate-500">
-                    {a.fotos.length} foto(s) · por {a.reclassificada_por}
-                  </span>
-                  <Botao
-                    tamanho="sm"
-                    className="ml-auto"
-                    disabled={salvando}
-                    onClick={() => gravar(desfazerReclassificacao(r.itens, i))}
-                  >
-                    <Undo2 size={13} />
-                    Desfazer
-                  </Botao>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {erro && <Aviso>{erro}</Aviso>}
-      </div>
-    </Modal>
-  );
-}
 
 function CartaoRegistro({
   r,
   quem,
+  quemId,
+  podeExcluir,
   onMudou,
 }: {
   r: Registro;
   quem: string | null;
+  quemId: string | null;
+  podeExcluir: boolean;
   onMudou: () => void;
 }) {
   const [reclassificando, setReclassificando] = useState(false);
+  const [anexando, setAnexando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [restaurando, setRestaurando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const Icone = ICONE[r.tipo];
+  // O registro do histórico é mais largo do que as peças de correção precisam.
+  // Aqui ele vira o recorte delas — e é este `if` que garante que só vistoria
+  // chega nas três: roteiro e ocorrência não têm o que reclassificar.
+  const vistoria: Vistoria | null = r.checklistId
+    ? {
+        checklistId: r.checklistId,
+        veiculoId: r.veiculoId,
+        placa: r.placa,
+        data: r.data,
+        tecnico: r.tecnico,
+        itens: r.itens,
+        fotos: r.fotos,
+        avarias: r.avarias,
+      }
+    : null;
+
+  async function restaurar() {
+    if (!r.checklistId) return;
+    setRestaurando(true);
+    setErro(null);
+    const supabase = createClient();
+    // O `.select` confere que alterou mesmo: UPDATE barrado pela RLS volta sem
+    // erro e com zero linhas, e aí o botão fingiria ter funcionado.
+    const { data, error } = await supabase
+      .from("checklists")
+      .update({ anulada_em: null, anulada_por: null, motivo_anulacao: null })
+      .eq("id", r.checklistId)
+      .select("id");
+    setRestaurando(false);
+    if (error || !data || data.length === 0) {
+      setErro(
+        error
+          ? mensagemDeErro(error, "a restauração")
+          : "Nada foi alterado: só o gestor da frota pode restaurar vistoria.",
+      );
+      return;
+    }
+    onMudou();
+  }
+
   return (
     <Cartao
-      className={cx("border-l-4 p-4", r.alerta ? "border-l-red-600" : FAIXA_TIPO[r.tipo])}
+      className={cx(
+        "border-l-4 p-4",
+        r.anulada
+          ? "border-l-slate-300 bg-slate-50/60"
+          : r.alerta
+            ? "border-l-red-600"
+            : FAIXA_TIPO[r.tipo],
+      )}
     >
       <div className="flex flex-wrap items-center gap-2">
         <Icone size={16} className="shrink-0 text-slate-400" />
         <Placa>{r.placa}</Placa>
         <span className="text-[13px] text-slate-500">{r.modelo}</span>
         <Badge tom={TOM_TIPO[r.tipo]}>{r.tipo}</Badge>
+        {r.anulada && <Badge tom="mudo">ANULADA</Badge>}
         <span className="ml-auto text-[12.5px] tabular-nums text-slate-500">{dataBR(r.data)}</span>
       </div>
 
@@ -670,25 +585,82 @@ function CartaoRegistro({
         {r.detalhe ? " · " + r.detalhe : ""}
       </div>
 
+      {r.anulada && (
+        <div className="mt-2.5 rounded-lg bg-slate-100 p-2.5 text-[12.5px] text-slate-600 ring-1 ring-inset ring-slate-200">
+          Excluída por <strong>{r.anulada.por ?? "alguém"}</strong> em{" "}
+          {diaHoraDe(r.anulada.em) ?? "—"}
+          {r.anulada.motivo ? ` · ${r.anulada.motivo}` : ""}. Não conta em nenhuma tela.
+        </div>
+      )}
+
       {/* Reclassificar é ação de gestor. O botão aparece para todo mundo que
           chega no histórico (gestor e PCM), e a RLS de `checklists` é quem
           decide de verdade: o PCM recebe o aviso em vez de um erro cru. */}
       {r.tipo === "CHECKLIST" && r.checklistId && (
-        <div className="mt-2.5">
-          <Botao tamanho="sm" onClick={() => setReclassificando(true)}>
-            <ImageOff size={13} />
-            Reclassificar fotos
-          </Botao>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {r.anulada ? (
+            <Botao tamanho="sm" disabled={restaurando} onClick={restaurar}>
+              <RotateCcw size={13} />
+              {restaurando ? "Restaurando…" : "Restaurar vistoria"}
+            </Botao>
+          ) : (
+            <>
+              <Botao tamanho="sm" onClick={() => setReclassificando(true)}>
+                <ImageOff size={13} />
+                Reclassificar fotos
+              </Botao>
+              <Botao tamanho="sm" onClick={() => setAnexando(true)}>
+                <ImagePlus size={13} />
+                Anexar fotos
+              </Botao>
+              {podeExcluir && (
+                <Botao tamanho="sm" variante="perigo" onClick={() => setExcluindo(true)}>
+                  <Trash2 size={13} />
+                  Excluir vistoria
+                </Botao>
+              )}
+            </>
+          )}
         </div>
       )}
 
-      {reclassificando && (
+      {erro && (
+        <div className="mt-2">
+          <Aviso>{erro}</Aviso>
+        </div>
+      )}
+
+      {reclassificando && vistoria && (
         <ReclassificarFotos
-          r={r}
+          r={vistoria}
           quem={quem}
           onFechar={() => setReclassificando(false)}
           onSalvo={() => {
             setReclassificando(false);
+            onMudou();
+          }}
+        />
+      )}
+
+      {anexando && vistoria && (
+        <AnexarFotos
+          r={vistoria}
+          quem={quem}
+          onFechar={() => setAnexando(false)}
+          onSalvo={() => {
+            setAnexando(false);
+            onMudou();
+          }}
+        />
+      )}
+
+      {excluindo && vistoria && (
+        <ExcluirVistoria
+          r={vistoria}
+          quemId={quemId}
+          onFechar={() => setExcluindo(false)}
+          onSalvo={() => {
+            setExcluindo(false);
             onMudou();
           }}
         />
@@ -705,7 +677,15 @@ function CartaoRegistro({
                 loading="lazy"
                 className="block h-[84px] w-[84px] rounded-lg object-cover ring-1 ring-slate-200 transition hover:ring-brand-400"
               />
-              <span className="mt-1 block text-center text-[10.5px] text-slate-400">{f.legenda}</span>
+              <span
+                className={cx(
+                  "mt-1 block text-center text-[10.5px]",
+                  f.anexadaPor ? "text-amber-700" : "text-slate-400",
+                )}
+              >
+                {f.legenda}
+                {f.anexadaPor ? " · anexada" : ""}
+              </span>
             </a>
           ))}
         </div>
