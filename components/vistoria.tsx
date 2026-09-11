@@ -1,15 +1,16 @@
 "use client";
 
-// As três correções que o gestor faz numa vistoria já enviada.
+// As correções que o gestor faz numa vistoria já enviada.
 //
-// Vieram da primeira semana de uso, e são a mesma pergunta vista de três
+// Vieram da primeira semana de uso, e são a mesma pergunta vista de quatro
 // ângulos: **o que fazer quando a vistoria não saiu como devia**.
 //
 // - `ReclassificarFotos` — o técnico mandou o dano como foto semanal.
 // - `AnexarFotos` — a foto não subiu na hora e chegou depois, por fora.
+// - `TrocarVeiculo` — a vistoria foi lançada no veículo errado.
 // - `ExcluirVistoria` — a vistoria inteira foi feita errada.
 //
-// As três têm a mesma disciplina: nada se apaga, tudo fica assinado, e a tela
+// As quatro têm a mesma disciplina: nada se apaga, tudo fica assinado, e a tela
 // mostra a assinatura. Vistoria é prova — é o que responde, um mês depois, se
 // o amassado já estava lá. Correção que apaga o rastro destrói exatamente o
 // que a vistoria servia para guardar.
@@ -17,11 +18,14 @@
 // Moram aqui, e não dentro de `/historico`, porque a tela do histórico já
 // passava de mil linhas e porque peça isolada se prova isolada.
 
-import { useState } from "react";
-import { ImageOff, ImagePlus, Trash2, Undo2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeftRight, ImageOff, ImagePlus, Trash2, Undo2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ANGULOS } from "@/lib/frota/angulos";
 import { anexarComoAvaria, anexarSemanais, removerAnexo } from "@/lib/frota/anexo";
+import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
+import { avisosDaTroca, registrarCorrecoes, type Mudanca, type Vizinha } from "@/lib/frota/correcao";
+import { emKm, paraInteiro } from "@/lib/frota/numero";
 import {
   AVARIA_ONDE,
   AVARIA_TIPO,
@@ -39,6 +43,7 @@ import {
   Campo,
   CampoFoto,
   CampoFotos,
+  CampoNumero,
   Input,
   Modal,
   Select,
@@ -80,6 +85,10 @@ export type Vistoria = {
   checklistId: string;
   veiculoId: string | null;
   placa: string;
+  modelo: string;
+  /** O hodômetro que a vistoria registrou. A troca de veículo confere este
+   *  número contra as vistorias vizinhas do veículo de destino. */
+  km: number | null;
   data: string;
   tecnico: string;
   itens: unknown;
@@ -584,6 +593,241 @@ export function ExcluirVistoria({
             placeholder="veículo errado, km digitado errado, enviada duas vezes…"
           />
         </Campo>
+        {erro && <Aviso>{erro}</Aviso>}
+      </div>
+    </Modal>
+  );
+}
+
+
+/**
+ * Trocar o veículo da vistoria.
+ *
+ * O CASO REAL: "fizeram um checklist da Saveiro como se fosse da Strada."
+ *
+ * A vistoria aconteceu inteira e aconteceu certo — o técnico andou em volta do
+ * veículo, tirou as cinco fotos, leu o hodômetro. Só o nome na lista está
+ * errado, e é o tipo de erro que se comete em dois segundos: a Strada é a
+ * primeira da lista.
+ *
+ * Excluir e mandar refazer joga fora um trabalho bem feito, e ninguém refaz: o
+ * veículo já saiu para a rua e as fotos são de ontem. Deixar como está é pior
+ * ainda — a Strada fica com km e avarias que não são dela, a Saveiro fica sem
+ * vistoria na semana, e o comparativo das duas deixa de significar coisa
+ * alguma.
+ *
+ * As fotos continuam no mesmo lugar do Storage, na pasta do veículo antigo. O
+ * endereço delas não muda e nada se perde; mover arquivo de balde para
+ * combinar com a correção seria trocar prova de lugar por estética.
+ */
+export function TrocarVeiculo({
+  r,
+  veiculos,
+  quem,
+  onFechar,
+  onSalvo,
+}: {
+  r: Vistoria;
+  veiculos: { id: string; placa: string; modelo: string }[];
+  quem: string | null;
+  onFechar: () => void;
+  onSalvo: () => void;
+}) {
+  const [novoId, setNovoId] = useState("");
+  const [km, setKm] = useState(r.km != null ? String(r.km) : "");
+  const [antes, setAntes] = useState<Vizinha | null>(null);
+  const [depois, setDepois] = useState<Vizinha | null>(null);
+  const [conferindo, setConferindo] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const novo = veiculos.find((v) => v.id === novoId) ?? null;
+  const kmNovo = paraInteiro(km);
+
+  // As vistorias vizinhas do veículo escolhido. Servem para o gestor CONFERIR
+  // que escolheu o veículo certo antes de gravar: se o hodômetro desta vistoria
+  // se encaixa entre a de antes e a de depois, é ele mesmo.
+  //
+  // A busca mora dentro do efeito, e não num `useCallback` chamado por ele: o
+  // lint do projeto barra mexer no estado direto no corpo do efeito, e com
+  // razão — é o que dispara render em cascata.
+  useEffect(() => {
+    let valeu = true;
+    const supabase = createClient();
+    const buscar = async (lado: "antes" | "depois") => {
+      const monta = (comFiltro: boolean) => {
+        let q = supabase
+          .from("checklists")
+          .select("data, km_atual")
+          .eq("veiculo_id", novoId)
+          .neq("id", r.checklistId);
+        q =
+          lado === "antes"
+            ? q.lte("data", r.data).order("data", { ascending: false })
+            : q.gt("data", r.data).order("data", { ascending: true });
+        // Vistoria anulada não serve de referência — ela não conta em lugar
+        // nenhum. Antes da 0017 a coluna não existe e a consulta é refeita sem
+        // o filtro, senão a conferência quebraria a tela.
+        if (comFiltro) q = q.is("anulada_em", null);
+        return q.limit(1);
+      };
+      let res = await monta(true);
+      if (faltaMigracaoDaAnulacao(res.error)) res = await monta(false);
+      const linha = ((res.data as { data: string; km_atual: number | null }[]) ?? [])[0];
+      return linha ? { ...linha, mesmoDia: linha.data === r.data } : null;
+    };
+
+    (async () => {
+      if (!novoId) {
+        if (valeu) {
+          setAntes(null);
+          setDepois(null);
+          setConferindo(false);
+        }
+        return;
+      }
+      setConferindo(true);
+      const [a, d] = await Promise.all([buscar("antes"), buscar("depois")]);
+      if (!valeu) return; // trocou de veículo no meio da consulta
+      setAntes(a);
+      setDepois(d);
+      setConferindo(false);
+    })();
+
+    return () => {
+      valeu = false;
+    };
+  }, [novoId, r.checklistId, r.data]);
+
+  const avisos = avisosDaTroca({
+    km: kmNovo,
+    antes,
+    depois,
+    placaDestino: novo?.placa ?? "Esse veículo",
+    data: r.data,
+  });
+
+  async function trocar() {
+    if (!novo) {
+      setErro("Escolha o veículo certo.");
+      return;
+    }
+    if (kmNovo == null || kmNovo <= 0) {
+      setErro("O km precisa ser um número. É ele que o histórico do veículo usa.");
+      return;
+    }
+    setSalvando(true);
+    setErro(null);
+    try {
+      const mudancas: Mudanca[] = [
+        {
+          campo: "veiculo",
+          de: `${r.modelo} ${r.placa}`.trim(),
+          para: `${novo.modelo} ${novo.placa}`.trim(),
+        },
+        { campo: "km", de: r.km != null ? String(r.km) : null, para: String(kmNovo) },
+      ];
+      await gravarVistoria(r.checklistId, {
+        veiculo_id: novo.id,
+        km_atual: kmNovo,
+        itens: registrarCorrecoes(r.itens, mudancas, quem),
+      });
+      onSalvo();
+    } catch (err) {
+      setErro(mensagemDeErro(err, "a troca de veículo"));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal
+      aberto
+      titulo={`Trocar o veículo · ${r.placa} · ${dataBR(r.data)}`}
+      onFechar={onFechar}
+      rodape={
+        <>
+          <Botao onClick={onFechar}>Cancelar</Botao>
+          <Botao variante="primario" disabled={salvando || !novo} onClick={trocar}>
+            <ArrowLeftRight size={14} />
+            {salvando ? "Trocando…" : "Trocar veículo"}
+          </Botao>
+        </>
+      }
+    >
+      <div className="space-y-3.5">
+        <p className="text-[13px] leading-relaxed text-slate-600">
+          A vistoria de <strong>{r.tecnico}</strong> passa inteira para o outro veículo — fotos,
+          avarias e km. Nada se refaz e nada se perde; a troca fica registrada no cartão da
+          vistoria, com seu nome.
+        </p>
+
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <Campo rotulo="Está lançada em">
+            <div className="campo bg-slate-50 text-slate-500">
+              {[r.modelo, r.placa].filter(Boolean).join(" — ")}
+            </div>
+          </Campo>
+          <Campo rotulo="Deveria ser">
+            <Select value={novoId} onChange={(e) => setNovoId(e.target.value)}>
+              <option value="">Selecione o veículo…</option>
+              {veiculos
+                .filter((v) => v.id !== r.veiculoId)
+                .map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.modelo} — {v.placa}
+                  </option>
+                ))}
+            </Select>
+          </Campo>
+        </div>
+
+        <CampoNumero
+          rotulo="Km desta vistoria"
+          valor={km}
+          onValor={setKm}
+          unidade="km"
+          inputMode="numeric"
+          dica="O hodômetro que o técnico leu. Confira contra as vistorias do veículo novo, logo abaixo."
+        />
+
+        {novo && (
+          <div className="rounded-lg bg-slate-50 p-3 text-[12.5px] leading-relaxed text-slate-600 ring-1 ring-inset ring-slate-200">
+            <div className="mb-1 font-semibold text-slate-700">
+              As vistorias de {novo.placa} em volta desta data
+            </div>
+            {conferindo ? (
+              "conferindo…"
+            ) : !antes && !depois ? (
+              "Esse veículo não tem nenhuma outra vistoria — não há com o que comparar o km."
+            ) : (
+              <ul className="space-y-0.5">
+                <li>
+                  antes:{" "}
+                  {antes ? `${dataBR(antes.data)} · ${emKm(antes.km_atual)}` : "nenhuma vistoria anterior"}
+                </li>
+                <li>
+                  depois:{" "}
+                  {depois ? `${dataBR(depois.data)} · ${emKm(depois.km_atual)}` : "nenhuma vistoria posterior"}
+                </li>
+              </ul>
+            )}
+          </div>
+        )}
+
+        {avisos.length > 0 && (
+          <Aviso tom="atencao">
+            <div className="space-y-1">
+              {avisos.map((a) => (
+                <div key={a}>{a}</div>
+              ))}
+              <div className="text-[12px] opacity-80">
+                Isto não impede a troca — só confira se é mesmo este o veículo.
+              </div>
+            </div>
+          </Aviso>
+        )}
+
         {erro && <Aviso>{erro}</Aviso>}
       </div>
     </Modal>
