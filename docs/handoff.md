@@ -731,6 +731,16 @@ agora a única forma de corrigir km digitado errado era excluir e refazer.
 provas). Quem chega nessa tela está consertando dado torto à mão, com o veículo
 já na rua; uma trava viraria só um motivo para desistir e deixar errado.
 
+**Câmera no formulário do técnico, arquivo na correção do gestor.** O
+`CampoFoto` do kit tem `daCamera`, ligado por padrão: no celular do técnico o
+campo abre a câmera direto, porque a vistoria é o que ele está vendo agora e
+deixar a galeria à mão é convidar a reaproveitar a foto da semana passada. Em
+**Anexar fotos** o padrão se inverte (`daCamera={false}`): ali a foto veio por
+fora — WhatsApp, e-mail — e abrir a câmera do gestor só serviria para
+fotografar a parede da sala. No computador o navegador ignora o atributo e
+sempre abre o seletor de arquivo, então a tela do técnico continua aceitando
+arquivo quando ele usa o notebook.
+
 **As fotos não mudam de lugar no Storage** — continuam na pasta do veículo
 antigo. O endereço delas não muda e nada se perde; mover arquivo de balde para
 combinar com a correção seria trocar prova de lugar por estética.

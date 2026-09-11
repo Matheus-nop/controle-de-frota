@@ -314,12 +314,27 @@ export function CampoFoto({
   onArquivo,
   dica,
   obrigatoria,
+  daCamera = true,
 }: {
   rotulo: string;
   arquivo: File | null;
   onArquivo: (f: File | null) => void;
   dica?: ReactNode;
   obrigatoria?: boolean;
+  /**
+   * Abrir a câmera direto, no celular, em vez do seletor de arquivo.
+   *
+   * Ligado por padrão porque é o que a vistoria do técnico pede: ele está em pé
+   * ao lado do veículo, e a foto é o que ele está vendo AGORA. Deixar a galeria
+   * à mão ali é convidar a reaproveitar a foto da semana passada, e uma vistoria
+   * com foto velha não prova nada — que é a única coisa que ela serve para
+   * fazer.
+   *
+   * Desligado nas telas de correção do gestor, onde é exatamente o contrário: a
+   * foto chegou por fora (WhatsApp, e-mail) e precisa vir do arquivo. No
+   * computador o navegador ignora isto e sempre abre o seletor.
+   */
+  daCamera?: boolean;
 }) {
   const previa = useMemo(() => (arquivo ? URL.createObjectURL(arquivo) : null), [arquivo]);
   useEffect(() => {
@@ -370,7 +385,7 @@ export function CampoFoto({
           <input
             type="file"
             accept="image/*"
-            capture="environment"
+            capture={daCamera ? "environment" : undefined}
             onChange={(e) => {
               onArquivo(e.target.files?.[0] ?? null);
               // Zera para dar para escolher a MESMA foto de novo depois de
