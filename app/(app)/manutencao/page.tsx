@@ -1,19 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Paperclip, Plus, Printer } from "lucide-react";
+import { Paperclip, Plus, Printer, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/frota/tempo";
 import { emKm, emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
 import { itensDoMarco, marcoSugerido, regrasDoMarco, type Escopo } from "@/lib/frota/escopo";
-import { enviarFoto } from "@/lib/frota/foto";
+import { enviarFotos } from "@/lib/frota/foto";
+import {
+  anexarNotas,
+  faltaMigracaoDasNotas,
+  notasDe,
+  removerNota,
+  resumoDaNota,
+  ROTULOS_NOTA,
+} from "@/lib/frota/notas";
+import { mensagemDeErro } from "@/lib/frota/erro";
 import {
   Aviso,
   Badge,
   Botao,
   BotaoLink,
   Campo,
+  CampoArquivos,
   CampoNumero,
+  chaveDoArquivo,
   Cartao,
   Carregando,
   Checkbox,
@@ -53,6 +64,7 @@ type Manut = {
   pecas_trocadas: string | null;
   proxima_revisao_km: number | null;
   nota_fiscal_url: string | null;
+  notas_fiscais?: unknown;
   veiculo: { placa: string; modelo: string } | { placa: string; modelo: string }[] | null;
 };
 
@@ -226,40 +238,104 @@ function CartaoManutencao({
     m.proxima_revisao_km != null ? String(m.proxima_revisao_km) : "",
   );
   const [resp, setResp] = useState(m.responsavel_id || "");
-  const [nf, setNf] = useState<FileList | null>(null);
+  // A oficina fatura peça e mão de obra em notas separadas, às vezes de CNPJs
+  // diferentes. Por isso é lista, e por isso cada uma tem o seu rótulo — o nome
+  // do arquivo costuma ser "scan_0012.pdf" e não ajuda ninguém depois.
+  const [notas, setNotas] = useState<File[]>([]);
+  const [rotulos, setRotulos] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; txt: string } | null>(null);
+
+  // As notas já anexadas, nas duas formas — a coluna única antiga e a lista.
+  const notasAnexadas = notasDe(m);
+
+  /** Tira uma nota da manutenção. O arquivo continua no Storage: removeu a
+   *  errada, o endereço ainda existe. Some da manutenção, que é o que o botão
+   *  promete. */
+  async function tirarNota(url: string) {
+    setSalvando(true);
+    setMsg(null);
+    try {
+      const supabase = createClient();
+      let { error } = await supabase
+        .from("manutencoes")
+        .update(removerNota(m, url))
+        .eq("id", m.id);
+      // Antes da 0019 só existe a nota da coluna antiga — e tirar aquela é
+      // zerar a coluna.
+      if (faltaMigracaoDasNotas(error)) {
+        ({ error } = await supabase
+          .from("manutencoes")
+          .update({ nota_fiscal_url: null })
+          .eq("id", m.id));
+      }
+      if (error) throw error;
+      onSalvo();
+    } catch (err) {
+      setMsg({ ok: false, txt: mensagemDeErro(err, "a remoção da nota") });
+    } finally {
+      setSalvando(false);
+    }
+  }
 
   async function salvar() {
     setSalvando(true);
     setMsg(null);
     try {
       const supabase = createClient();
-      const enviada = await enviarFoto(supabase, "manutencoes", `${m.id}/nf`, nf?.[0]);
-      const nfUrl = enviada ?? m.nota_fiscal_url;
+      // Em fila, como toda foto do app desde que o 4G da rua derrubou o envio
+      // simultâneo do checklist. PDF passa inteiro: a redução só mexe em imagem.
+      const enviadas = await enviarFotos(supabase, "manutencoes", `${m.id}/nf`, notas);
+      const anexadas = anexarNotas(
+        m,
+        enviadas.map((url, i) => ({ url, rotulo: rotulos[chaveDoArquivo(notas[i])] || null })),
+      );
 
       const concluindo = status === "CONCLUÍDA";
-      const { error } = await supabase
+      const campos = {
+        status,
+        oficina: oficina.trim() || null,
+        km_abertura: paraInteiro(kmAbertura),
+        orcamento: paraDecimal(orcamento),
+        valor_final: paraDecimal(valor),
+        servico_realizado: servico.trim() || null,
+        pecas_trocadas: pecas.trim() || null,
+        proxima_revisao_km: paraInteiro(proxRev),
+        responsavel_id: resp || null,
+        concluida_em: concluindo ? (m.concluida_em ?? hojeBR()) : null,
+      };
+
+      let { error } = await supabase
         .from("manutencoes")
-        .update({
-          status,
-          oficina: oficina.trim() || null,
-          km_abertura: paraInteiro(kmAbertura),
-          orcamento: paraDecimal(orcamento),
-          valor_final: paraDecimal(valor),
-          servico_realizado: servico.trim() || null,
-          pecas_trocadas: pecas.trim() || null,
-          proxima_revisao_km: paraInteiro(proxRev),
-          responsavel_id: resp || null,
-          concluida_em: concluindo ? (m.concluida_em ?? hojeBR()) : null,
-          nota_fiscal_url: nfUrl,
-        })
+        .update({ ...campos, ...anexadas })
         .eq("id", m.id);
+
+      // Antes da 0019 a coluna da lista não existe. Em vez de recusar o
+      // andamento inteiro por causa dela, grava o resto e guarda a última nota
+      // na coluna antiga — e diz em português o que ficou para depois.
+      let soUmaNota = false;
+      if (faltaMigracaoDasNotas(error)) {
+        const ultima = anexadas.notas_fiscais.at(-1) as { url?: string } | undefined;
+        ({ error } = await supabase
+          .from("manutencoes")
+          .update({ ...campos, nota_fiscal_url: ultima?.url ?? m.nota_fiscal_url })
+          .eq("id", m.id));
+        soUmaNota = anexadas.notas_fiscais.length > 1;
+      }
       if (error) throw error;
-      setMsg({ ok: true, txt: "Salvo." });
+      setMsg({
+        ok: true,
+        txt: soUmaNota
+          ? "Salvo, mas só uma nota ficou anexada: a migração 0019 ainda não rodou no Supabase."
+          : "Salvo.",
+      });
+      // A lista de escolhidos zera: o que foi enviado agora aparece no cartão, e
+      // deixar os arquivos no campo faria o próximo "salvar" reenviar tudo.
+      setNotas([]);
+      setRotulos({});
       onSalvo();
     } catch (err) {
-      setMsg({ ok: false, txt: err instanceof Error ? err.message : "Erro ao salvar." });
+      setMsg({ ok: false, txt: mensagemDeErro(err, "o registro do andamento") });
     } finally {
       setSalvando(false);
     }
@@ -285,16 +361,34 @@ function CartaoManutencao({
         {m.concluida_em ? " · concluída " + dataBR(m.concluida_em) : ""}
       </div>
 
-      {m.nota_fiscal_url && (
-        <a
-          href={m.nota_fiscal_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-brand-700 hover:underline"
-        >
-          <Paperclip size={13} />
-          Ver nota fiscal
-        </a>
+      {notasAnexadas.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+            {notasAnexadas.length === 1 ? "Nota fiscal" : `${notasAnexadas.length} notas fiscais`}
+          </span>
+          {notasAnexadas.map((n, i) => (
+            <span key={n.url} className="inline-flex items-center gap-1">
+              <a
+                href={n.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-brand-700 hover:underline"
+              >
+                <Paperclip size={13} />
+                {resumoDaNota(n, i)}
+              </a>
+              <button
+                type="button"
+                aria-label={`Tirar a nota ${resumoDaNota(n, i)} desta manutenção`}
+                disabled={salvando}
+                onClick={() => tirarNota(n.url)}
+                className="toque rounded-full p-1 text-slate-300 hover:bg-red-50 hover:text-red-600"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -372,14 +466,30 @@ function CartaoManutencao({
             <Campo rotulo="Peças trocadas">
               <Input value={pecas} onChange={(e) => setPecas(e.target.value)} placeholder="peças substituídas" />
             </Campo>
-            <Campo rotulo="Nota fiscal (foto ou PDF)">
-              <Input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={(e) => setNf(e.target.files)}
-                className="file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
-              />
-            </Campo>
+            <CampoArquivos
+              rotulo="Notas fiscais (foto ou PDF)"
+              dica="A oficina costuma emitir uma nota de peças e outra de serviço. Pode anexar as duas."
+              accept="image/*,application/pdf"
+              arquivos={notas}
+              onArquivos={setNotas}
+              extra={(f) => (
+                <select
+                  value={rotulos[chaveDoArquivo(f)] ?? ""}
+                  onChange={(e) =>
+                    setRotulos((r) => ({ ...r, [chaveDoArquivo(f)]: e.target.value }))
+                  }
+                  aria-label={`O que a nota ${f.name} cobre`}
+                  className="shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11.5px] text-slate-700"
+                >
+                  <option value="">sem rótulo</option>
+                  {ROTULOS_NOTA.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              )}
+            />
           </div>
 
           <div className="mt-3.5 flex flex-wrap items-center gap-3">
