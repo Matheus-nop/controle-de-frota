@@ -820,6 +820,39 @@ pergunta), as duas vistorias lado a lado e a linha de visto do responsável.
 adiou sai como retângulo branco na impressão, e relatório de dano sem a foto do
 dano não serve para nada.
 
+### Várias notas fiscais por manutenção (feito, 2026-09-11) — migração **0019**
+"Veículos muitas vezes emitem várias notas: de venda de peças e de serviços."
+
+É como a oficina fatura de verdade — a peça sai como venda de mercadoria e a mão
+de obra como prestação de serviço, às vezes de CNPJs diferentes no mesmo
+conserto. Com `nota_fiscal_url` sozinha, a segunda nota substituía a primeira e a
+manutenção ficava com metade do custo comprovado. Na hora de conferir a fatura do
+mês, ou de acionar garantia de peça, é justamente a que sumiu que faz falta.
+
+**`notas_fiscais jsonb`** guarda `[{url, rotulo, em}]`, com `rotulo` em
+PEÇAS/SERVIÇO/OUTRO. Não é `check` no banco de propósito: nota de frete, de
+guincho e de terceiro aparecem, e recusar o documento por causa da etiqueta seria
+perder a nota para ganhar o rótulo.
+
+**A coluna antiga fica**, com o que já foi gravado — `lib/frota/notas.ts` lê as
+duas formas, como `avarias.ts` faz com as avarias.
+
+> **Um furo que o teste pegou antes de ir para a tela:** remover a nota do
+> formato antigo não funcionava. A lista saía sem ela e a coluna `nota_fiscal_url`
+> a devolvia na leitura seguinte. Por isso `anexarNotas` e `removerNota` devolvem
+> os **dois** campos do update, com `nota_fiscal_url: null` sempre — a nota antiga
+> entra na lista com a mesma URL, e a conversão acontece porque alguém está
+> editando aquele registro de propósito, não numa migração cega.
+
+**`CampoArquivos`** entrou no kit ao lado do `CampoFotos`, por causa do PDF:
+miniatura de PDF é imagem quebrada, e a tela ficaria dizendo que o anexo deu
+errado quando não deu. Cada arquivo vira uma linha com ícone, nome e tamanho, e
+`extra` deixa a página pendurar um controle por arquivo — aqui, o rótulo da nota.
+
+**Antes da migração a tela não recusa o andamento:** detecta a coluna ausente,
+grava o resto, guarda a última nota na coluna antiga e diz em português o que
+ficou para depois.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`

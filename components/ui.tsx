@@ -14,7 +14,7 @@
  */
 
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, ImageIcon, X } from "lucide-react";
 import { emKm, emKmPorLitro, emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
 import {
   useCallback,
@@ -892,5 +892,109 @@ export function TiraDeFotos({
         />
       )}
     </>
+  );
+}
+
+/* --------------------------------------------------------------- arquivos */
+
+/** A identidade de um arquivo escolhido. Nome sozinho não basta: a câmera do
+ *  celular repete nome o tempo todo, e o scanner da oficina também. */
+export const chaveDoArquivo = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
+
+/**
+ * Vários arquivos que não são necessariamente foto.
+ *
+ * Existe ao lado do `CampoFotos` por causa do PDF: miniatura de PDF é imagem
+ * quebrada, e a tela fica dizendo que o anexo deu errado quando não deu. Aqui
+ * cada arquivo vira uma linha com ícone, nome e tamanho — que é o que identifica
+ * uma nota fiscal, já que o nome costuma ser "scan_0012.pdf".
+ *
+ * `extra` é o lugar de quem chama pendurar um controle por arquivo, como o
+ * rótulo da nota (peças ou serviço). A regra de negócio fica na página; aqui só
+ * mora a mecânica de escolher arquivo — inclusive a de ACUMULAR escolhas, que o
+ * `<input type=file>` não faz sozinho: ele substitui a seleção inteira a cada
+ * vez, e foi assim que cinco fotos de vistoria viraram uma só.
+ */
+export function CampoArquivos({
+  rotulo,
+  dica,
+  arquivos,
+  onArquivos,
+  accept,
+  className,
+  extra,
+}: {
+  rotulo: string;
+  dica?: ReactNode;
+  arquivos: File[];
+  onArquivos: (f: File[]) => void;
+  accept?: string;
+  className?: string;
+  extra?: (arquivo: File) => ReactNode;
+}) {
+  function somar(lista: FileList | null) {
+    if (!lista || lista.length === 0) return;
+    const tinha = new Set(arquivos.map(chaveDoArquivo));
+    const novos = Array.from(lista).filter((f) => !tinha.has(chaveDoArquivo(f)));
+    if (novos.length) onArquivos([...arquivos, ...novos]);
+  }
+
+  return (
+    <Campo
+      rotulo={rotulo}
+      className={className}
+      dica={
+        arquivos.length === 0 ? (
+          dica
+        ) : (
+          <span className="font-semibold text-slate-700">
+            {arquivos.length} arquivo(s) escolhido(s)
+            {dica ? <span className="font-normal text-slate-500"> · {dica}</span> : null}
+          </span>
+        )
+      }
+    >
+      <input
+        type="file"
+        accept={accept}
+        multiple
+        onChange={(e) => {
+          somar(e.target.files);
+          // Zera para a próxima escolha disparar evento mesmo se for o mesmo
+          // arquivo, e para o "N arquivos" nativo não contradizer a lista.
+          e.target.value = "";
+        }}
+        className="campo file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+      />
+
+      {arquivos.length > 0 && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {arquivos.map((f) => {
+            const Icone = f.type.startsWith("image/") ? ImageIcon : FileText;
+            return (
+              <div
+                key={chaveDoArquivo(f)}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 ring-1 ring-inset ring-slate-200"
+              >
+                <Icone size={15} className="shrink-0 text-slate-400" />
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-slate-700">{f.name}</span>
+                <span className="shrink-0 text-[11px] tabular-nums text-slate-400">
+                  {Math.max(1, Math.round(f.size / 1024))} KB
+                </span>
+                {extra?.(f)}
+                <button
+                  type="button"
+                  aria-label={`Remover ${f.name}`}
+                  onClick={() => onArquivos(arquivos.filter((x) => chaveDoArquivo(x) !== chaveDoArquivo(f)))}
+                  className="toque shrink-0 rounded-full p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Campo>
   );
 }
