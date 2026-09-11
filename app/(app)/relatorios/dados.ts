@@ -50,6 +50,8 @@ export type Manutencao = {
   pecas_trocadas: string | null;
   orcamento: number | null;
   valor_final: number | null;
+  /** Nulo (ou ausente, antes da 0024) = não é garantia. */
+  garantia?: string | null;
   placa: string;
   modelo: string;
 };
