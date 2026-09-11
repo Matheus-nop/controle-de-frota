@@ -41,6 +41,7 @@ import {
   Pagina,
   Placa,
   Select,
+  TiraDeFotos,
   Vazio,
   cx,
   type Tom,
@@ -717,28 +718,16 @@ function CartaoRegistro({
       )}
 
       {r.fotos.length > 0 ? (
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {r.fotos.map((f) => (
-            <a key={f.url} href={f.url} target="_blank" rel="noopener noreferrer" className="block">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={f.url}
-                alt={`Foto ${f.legenda}`}
-                loading="lazy"
-                className="block h-[84px] w-[84px] rounded-lg object-cover ring-1 ring-slate-200 transition hover:ring-brand-400"
-              />
-              <span
-                className={cx(
-                  "mt-1 block text-center text-[10.5px]",
-                  f.anexadaPor ? "text-amber-700" : "text-slate-400",
-                )}
-              >
-                {f.legenda}
-                {f.anexadaPor ? " · anexada" : ""}
-              </span>
-            </a>
-          ))}
-        </div>
+        // A tira abre a galeria com a vistoria INTEIRA: quem clica na traseira
+        // quer ver a lateral em seguida, na seta, e não voltar e clicar de novo.
+        <TiraDeFotos
+          className="mt-2.5"
+          fotos={r.fotos.map((f) => ({
+            url: f.url,
+            legenda: f.legenda + (f.anexadaPor ? " · anexada" : ""),
+            destaque: !!f.anexadaPor,
+          }))}
+        />
       ) : (
         <div className="mt-2 text-[11.5px] text-slate-400">sem foto</div>
       )}

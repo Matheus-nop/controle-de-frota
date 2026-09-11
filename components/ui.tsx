@@ -14,11 +14,14 @@
  */
 
 import Link from "next/link";
-import { X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
 import { emKm, emKmPorLitro, emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
+  useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -650,5 +653,244 @@ export function Confirmar({
     >
       <div className="text-sm text-slate-700">{texto}</div>
     </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ fotos */
+
+/** Uma foto para a tira e para a galeria. */
+export type FotoGaleria = {
+  url: string;
+  /** O que a foto é: "traseira", "avaria", "chegada". Aparece embaixo da
+   *  miniatura e dentro da galeria. */
+  legenda?: string;
+  /** Chama atenção na legenda. Hoje marca foto que o gestor anexou depois. */
+  destaque?: boolean;
+};
+
+/**
+ * A foto em tela cheia, com seta para passar para a próxima.
+ *
+ * Onze fotos numa vistoria é o normal, e abrir uma por uma em aba nova para
+ * comparar a traseira de hoje com a de semana passada é o tipo de coisa que faz
+ * alguém desistir de conferir. Aqui a pessoa abre uma e vai apertando a seta.
+ *
+ * Passa dos dois lados (a última volta para a primeira) de propósito: quem está
+ * apertando a seta para ver o veículo inteiro não quer descobrir o fim da lista
+ * por uma tecla que parou de responder.
+ *
+ * Teclado, botão e deslize no celular fazem a mesma coisa — é a mesma pessoa
+ * olhando do computador na reunião e do celular no pátio.
+ */
+export function Galeria({
+  fotos,
+  indice,
+  onIndice,
+  onFechar,
+}: {
+  fotos: FotoGaleria[];
+  indice: number;
+  onIndice: (i: number) => void;
+  onFechar: () => void;
+}) {
+  const total = fotos.length;
+  const inicioDoToque = useRef({ x: 0, y: 0 });
+  const andar = useCallback(
+    (passo: number) => {
+      if (total === 0) return;
+      onIndice((indice + passo + total) % total);
+    },
+    [indice, total, onIndice],
+  );
+
+  useEffect(() => {
+    function tecla(e: KeyboardEvent) {
+      if (e.key === "ArrowRight") andar(1);
+      else if (e.key === "ArrowLeft") andar(-1);
+      else if (e.key === "Escape") onFechar();
+      else return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", tecla);
+    // Trava a rolagem do fundo: no celular, arrastar na foto rolava a página
+    // atrás em vez de passar a foto.
+    const antes = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", tecla);
+      document.body.style.overflow = antes;
+    };
+  }, [andar, onFechar]);
+
+  const foto = fotos[indice];
+  if (!foto) return null;
+
+  // Deslize: só conta movimento horizontal de verdade, senão rolar a tela com o
+  // dedo no meio da foto passaria de foto sem querer. Em `ref` porque variável
+  // solta escrita depois do render é o que o lint do projeto (com razão) barra.
+  const toque = inicioDoToque;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm"
+      onClick={onFechar}
+      onTouchStart={(e) => {
+        toque.current = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+      }}
+      onTouchEnd={(e) => {
+        const dx = e.changedTouches[0].clientX - toque.current.x;
+        const dy = e.changedTouches[0].clientY - toque.current.y;
+        if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) andar(dx < 0 ? 1 : -1);
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Foto da vistoria"
+    >
+      <div className="flex items-center gap-3 px-4 pt-4 text-white">
+        <span className="text-[13px] font-semibold tabular-nums">
+          {indice + 1} de {total}
+        </span>
+        {foto.legenda && (
+          <span className="truncate text-[13px] text-white/70">{foto.legenda}</span>
+        )}
+        <a
+          href={foto.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="toque ml-auto rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white"
+          aria-label="Abrir a foto original em outra aba"
+        >
+          <ExternalLink size={18} />
+        </a>
+        <button
+          type="button"
+          onClick={onFechar}
+          className="toque rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white"
+          aria-label="Fechar"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 items-center gap-1 px-1 py-2 sm:gap-3 sm:px-3">
+        {total > 1 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              andar(-1);
+            }}
+            className="toque shrink-0 rounded-full bg-white/10 p-2 text-white hover:bg-white/25 sm:p-3"
+            aria-label="Foto anterior"
+          >
+            <ChevronLeft size={22} />
+          </button>
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={foto.url}
+          alt={foto.legenda ?? "foto"}
+          onClick={(e) => e.stopPropagation()}
+          className="mx-auto max-h-full min-h-0 w-auto max-w-full rounded-lg object-contain"
+        />
+        {total > 1 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              andar(1);
+            }}
+            className="toque shrink-0 rounded-full bg-white/10 p-2 text-white hover:bg-white/25 sm:p-3"
+            aria-label="Próxima foto"
+          >
+            <ChevronRight size={22} />
+          </button>
+        )}
+      </div>
+
+      {total > 1 && (
+        <div
+          className="flex shrink-0 gap-1.5 overflow-x-auto px-4 pb-4 pt-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {fotos.map((f, i) => (
+            <button
+              key={f.url + i}
+              type="button"
+              onClick={() => onIndice(i)}
+              className={cx(
+                "shrink-0 rounded ring-2 transition",
+                i === indice ? "ring-white" : "ring-transparent opacity-50 hover:opacity-90",
+              )}
+              aria-label={`Ir para a foto ${i + 1}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={f.url} alt="" className="block h-12 w-12 rounded object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A tira de miniaturas de um registro. Clicar abre a galeria, já na foto certa.
+ *
+ * Mora no kit porque histórico, comparativo e vistoria mostram exatamente a
+ * mesma coisa — e porque a galeria só funciona se quem a abre souber a lista
+ * INTEIRA, e não a foto isolada que a pessoa clicou.
+ */
+export function TiraDeFotos({
+  fotos,
+  tamanho = "md",
+  className,
+}: {
+  fotos: FotoGaleria[];
+  tamanho?: "sm" | "md";
+  className?: string;
+}) {
+  const [aberta, setAberta] = useState<number | null>(null);
+  if (fotos.length === 0) return null;
+  const lado = tamanho === "sm" ? "h-20 w-20" : "h-[84px] w-[84px]";
+
+  return (
+    <>
+      <div className={cx("flex flex-wrap gap-2", className)}>
+        {fotos.map((f, i) => (
+          <button key={f.url + i} type="button" onClick={() => setAberta(i)} className="block text-left">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={f.url}
+              alt={f.legenda ? `Foto ${f.legenda}` : "foto"}
+              loading="lazy"
+              className={cx(
+                lado,
+                "block rounded-lg object-cover ring-1 ring-slate-200 transition hover:ring-brand-400",
+              )}
+            />
+            {f.legenda && (
+              <span
+                className={cx(
+                  "mt-1 block text-center text-[10.5px]",
+                  f.destaque ? "text-amber-700" : "text-slate-400",
+                )}
+              >
+                {f.legenda}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      {aberta !== null && (
+        <Galeria
+          fotos={fotos}
+          indice={aberta}
+          onIndice={setAberta}
+          onFechar={() => setAberta(null)}
+        />
+      )}
+    </>
   );
 }

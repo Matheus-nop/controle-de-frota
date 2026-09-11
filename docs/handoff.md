@@ -782,6 +782,34 @@ vistos" do PCM só faria ele dar ciência de novo no que o gestor tratou.
 > primeira versão "provou" que o técnico conseguia apagar, e era o teste que
 > estava errado, não a policy.
 
+### Galeria de fotos e relatório do comparativo (feito, 2026-09-11)
+Dois pedidos da mesma reunião, e a mesma raiz: **a foto é o que decide a
+conversa sobre dano**, e até agora ela era o que menos se conseguia olhar.
+
+**`Galeria` e `TiraDeFotos`** (no kit). Onze fotos numa vistoria é o normal, e
+abrir uma por uma em aba nova para comparar a traseira de hoje com a da semana
+passada é o tipo de coisa que faz alguém desistir de conferir. Agora abre em
+tela cheia e passa na **seta do teclado**, no botão, no deslize do dedo ou pela
+tira de miniaturas embaixo, com contador e legenda do ângulo. Passa dos dois
+lados (a última volta para a primeira) de propósito — quem está apertando a seta
+não quer descobrir o fim da lista por uma tecla que parou de responder.
+
+A tira mora no kit porque histórico e comparativo mostram a mesma coisa, e
+porque a galeria só funciona se quem a abre souber a lista INTEIRA, e não a foto
+isolada que a pessoa clicou.
+
+**`/comparativo/relatorio?a=…&b=…`** é o comparativo em papel, fora do route
+group `(app)` como a ordem de serviço. A tela responde "quando este dano
+apareceu?" para quem está olhando; a reunião é outra coisa — cinco pessoas em
+volta de uma mesa, e o que decide é a foto grande o bastante para todo mundo
+ver. Traz o que apareceu no período em destaque (com as fotos em meia largura,
+`object-contain`: foto de dano cortada para caber é sempre o pedaço que alguém
+pergunta), as duas vistorias lado a lado e a linha de visto do responsável.
+
+`loading="eager"` nas fotos do relatório não é detalhe: foto que o navegador
+adiou sai como retângulo branco na impressão, e relatório de dano sem a foto do
+dano não serve para nada.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
