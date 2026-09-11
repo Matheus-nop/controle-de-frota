@@ -392,8 +392,9 @@ export function AnexarFotos({
     <Modal aberto titulo={`Anexar fotos · ${r.placa} · ${dataBR(r.data)}`} onFechar={onFechar}>
       <div className="space-y-3.5">
         <p className="text-[13px] leading-relaxed text-slate-600">
-          Para quando o técnico não conseguiu enviar na hora. A foto entra nesta vistoria, na data
-          dela, marcada como anexada por você — e essa marca aparece no histórico e no comparativo.
+          Para quando o técnico não conseguiu enviar na hora. Pode ser a foto que ele mandou por
+          WhatsApp, do celular ou do computador. Ela entra nesta vistoria, na data dela, marcada
+          como anexada por você — e essa marca aparece no histórico e no comparativo.
         </p>
 
         <div className="flex flex-wrap gap-1.5">
@@ -420,6 +421,11 @@ export function AnexarFotos({
               <CampoFoto
                 key={chave}
                 rotulo={rotulo}
+                // Aqui a foto vem do arquivo, e não da câmera. O gestor está
+                // anexando o que o técnico mandou por WhatsApp, de ontem —
+                // abrir a câmera dele só serviria para fotografar a parede da
+                // sala. No formulário do técnico continua sendo o contrário.
+                daCamera={false}
                 dica={jaTem.has(chave) ? "a vistoria já tem esta — anexar acrescenta outra" : dica}
                 arquivo={porAngulo[chave] ?? null}
                 onArquivo={(f) => setPorAngulo((m) => ({ ...m, [chave]: f }))}
