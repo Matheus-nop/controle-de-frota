@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { Botao, BotaoLink, Carregando } from "@/components/ui";
 import { emKm, emReais } from "@/lib/frota/numero";
 import { itensDoMarco, regrasDoMarco, type Escopo } from "@/lib/frota/escopo";
+import { avisoDaGarantia, ehGarantia } from "@/lib/frota/garantia";
 
 // Ordem de serviço para imprimir e entregar ao técnico.
 //
@@ -37,6 +38,7 @@ type Manut = {
   status: string;
   proxima_revisao_km: number | null;
   revisao_km: number | null;
+  garantia: string | null;
   veiculo: Veic | Veic[] | null;
   responsavel: { nome: string } | { nome: string }[] | null;
 };
@@ -210,6 +212,21 @@ function Ordem() {
           </div>
         </header>
 
+        {/* A tarja vem antes de tudo, e com moldura preta em vez de cor: a
+            ordem sai em impressora monocromática, e um fundo colorido viraria
+            cinza claro. Quem está com o papel na mão é quem emite a cobrança —
+            se o aviso passar batido, a frota paga um serviço que não devia. */}
+        {ehGarantia(m.garantia) && (
+          <div className="mb-[18px] break-inside-avoid border-2 border-slate-900 px-3.5 py-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+              Atenção — serviço em garantia
+            </div>
+            <div className="mt-0.5 text-[14.5px] font-bold leading-snug text-slate-900">
+              {avisoDaGarantia(m.garantia)}
+            </div>
+          </div>
+        )}
+
         <Bloco titulo="Veículo">
           <div className="grid grid-cols-2 gap-x-[18px] gap-y-3 sm:grid-cols-4 print:grid-cols-4">
             <Dado rotulo="Placa" valor={v?.placa ?? "—"} />
@@ -227,7 +244,7 @@ function Ordem() {
             <Dado rotulo="Situação" valor={m.status} />
             <Dado rotulo="Oficina" valor={m.oficina ?? "a definir"} />
             <Dado rotulo="Solicitante" valor={resp?.nome ?? "—"} />
-            <Dado rotulo="Orçamento aprovado" valor={brl(m.orcamento)} />
+            <Dado rotulo="Orçamento aprovado" valor={ehGarantia(m.garantia) ? "EM GARANTIA" : brl(m.orcamento)} />
             <Dado rotulo="Próxima revisão" valor={nkm(m.proxima_revisao_km ?? v?.proxima_revisao_km)} />
           </div>
         </Bloco>
@@ -266,7 +283,13 @@ function Ordem() {
             <ParaPreencher rotulo="Entrada na oficina (data e hora)" />
             <ParaPreencher rotulo="Saída da oficina (data e hora)" />
             <ParaPreencher rotulo="Km na entrega" />
-            <ParaPreencher rotulo="Valor final (R$)" />
+            {/* A linha do valor continua existindo em garantia: a oficina
+                anota quanto custaria, que é o número que vira argumento depois
+                ("a FULL PNEUS refez R$ 1.400 de serviço este ano"). O que muda
+                é que ninguém emite a cobrança. */}
+            <ParaPreencher
+              rotulo={ehGarantia(m.garantia) ? "Valor final (R$) — em garantia, não cobrar" : "Valor final (R$)"}
+            />
           </div>
           <div className="mt-3 grid grid-cols-2 gap-x-[18px]">
             <ParaPreencher rotulo="Pendências / o que ficou para a próxima" largo linhas={2} />

@@ -504,10 +504,11 @@ function Manutencoes({ manutencoes, sufixo, periodo }: {
         dica="ordens abertas dentro do período"
         onCSV={() => baixar(`manutencoes-${sufixo}`,
           ["aberta_em", "placa", "veiculo", "tipo", "origem", "prioridade", "status", "oficina",
-            "problema", "servico_realizado", "pecas_trocadas", "orcamento", "valor_final", "concluida_em"],
+            "problema", "servico_realizado", "pecas_trocadas", "garantia", "orcamento", "valor_final",
+            "concluida_em"],
           manutencoes.map((m) => [m.aberta_em ?? "", m.placa, m.modelo, m.tipo ?? "", m.origem ?? "",
             m.prioridade ?? "", m.status, m.oficina ?? "", m.descricao_problema,
-            m.servico_realizado ?? "", m.pecas_trocadas ?? "",
+            m.servico_realizado ?? "", m.pecas_trocadas ?? "", m.garantia ?? "",
             m.orcamento?.toFixed(2) ?? "", m.valor_final?.toFixed(2) ?? "", m.concluida_em ?? ""]))}
       />
 

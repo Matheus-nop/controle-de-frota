@@ -15,6 +15,12 @@ import {
   resumoDaNota,
   ROTULOS_NOTA,
 } from "@/lib/frota/notas";
+import {
+  ehGarantia,
+  faltaMigracaoDaGarantia,
+  GARANTIAS,
+  rotuloDaGarantia,
+} from "@/lib/frota/garantia";
 import { mensagemDeErro } from "@/lib/frota/erro";
 import {
   Aviso,
@@ -65,6 +71,7 @@ type Manut = {
   proxima_revisao_km: number | null;
   nota_fiscal_url: string | null;
   notas_fiscais?: unknown;
+  garantia?: string | null;
   veiculo: { placa: string; modelo: string } | { placa: string; modelo: string }[] | null;
 };
 
@@ -97,6 +104,10 @@ const FILTROS: [string, string][] = [
   ["ABERTAS", "Em aberto"],
   ["CONCLUÍDA", "Concluídas"],
   ["CANCELADA", "Canceladas"],
+  // Fora dos status de propósito: garantia não é uma etapa da manutenção, é
+  // quem paga. Uma em garantia pode estar aberta ou concluída — e a pergunta
+  // que este filtro responde ("o que a oficina refez?") não liga para isso.
+  ["GARANTIA", "Em garantia"],
   ["TODAS", "Todas"],
 ];
 
@@ -145,7 +156,9 @@ export default function ManutencaoPage() {
       ? true
       : filtro === "ABERTAS"
         ? m.status === "ABERTA" || m.status === "EM EXECUÇÃO"
-        : m.status === filtro,
+        : filtro === "GARANTIA"
+          ? ehGarantia(m.garantia)
+          : m.status === filtro,
   );
   const abertas = manuts.filter((m) => m.status === "ABERTA" || m.status === "EM EXECUÇÃO").length;
   const gastoTotal = manuts.reduce((s, m) => s + (m.valor_final || 0), 0);
@@ -238,6 +251,7 @@ function CartaoManutencao({
     m.proxima_revisao_km != null ? String(m.proxima_revisao_km) : "",
   );
   const [resp, setResp] = useState(m.responsavel_id || "");
+  const [garantia, setGarantia] = useState(m.garantia ?? "");
   // A oficina fatura peça e mão de obra em notas separadas, às vezes de CNPJs
   // diferentes. Por isso é lista, e por isso cada uma tem o seu rótulo — o nome
   // do arquivo costuma ser "scan_0012.pdf" e não ajuda ninguém depois.
@@ -302,32 +316,44 @@ function CartaoManutencao({
         pecas_trocadas: pecas.trim() || null,
         proxima_revisao_km: paraInteiro(proxRev),
         responsavel_id: resp || null,
+        garantia: garantia || null,
         concluida_em: concluindo ? (m.concluida_em ?? hojeBR()) : null,
       };
 
-      let { error } = await supabase
-        .from("manutencoes")
-        .update({ ...campos, ...anexadas })
-        .eq("id", m.id);
-
-      // Antes da 0019 a coluna da lista não existe. Em vez de recusar o
-      // andamento inteiro por causa dela, grava o resto e guarda a última nota
-      // na coluna antiga — e diz em português o que ficou para depois.
+      // Duas colunas podem não existir ainda, conforme o que já rodou no
+      // Supabase: `notas_fiscais` (0019) e `garantia` (0024). Em vez de recusar
+      // o andamento inteiro por causa de uma coluna que o gestor nem viu, tenta
+      // de novo sem a que faltou e conta no fim o que ficou para depois.
+      const tentativa: Record<string, unknown> = { ...campos, ...anexadas };
+      let semGarantia = false;
       let soUmaNota = false;
-      if (faltaMigracaoDasNotas(error)) {
+
+      let { error } = await supabase.from("manutencoes").update(tentativa).eq("id", m.id);
+
+      // A mensagem do PostgREST nomeia a coluna que ele não achou; é o que
+      // separa a falta da 0024 da falta da 0019, já que o código do erro é o
+      // mesmo nas duas.
+      if (error && faltaMigracaoDaGarantia(error) && /garantia/i.test(error.message ?? "")) {
+        semGarantia = true;
+        delete tentativa.garantia;
+        ({ error } = await supabase.from("manutencoes").update(tentativa).eq("id", m.id));
+      }
+      if (error && faltaMigracaoDasNotas(error)) {
         const ultima = anexadas.notas_fiscais.at(-1) as { url?: string } | undefined;
-        ({ error } = await supabase
-          .from("manutencoes")
-          .update({ ...campos, nota_fiscal_url: ultima?.url ?? m.nota_fiscal_url })
-          .eq("id", m.id));
+        delete tentativa.notas_fiscais;
+        tentativa.nota_fiscal_url = ultima?.url ?? m.nota_fiscal_url;
         soUmaNota = anexadas.notas_fiscais.length > 1;
+        ({ error } = await supabase.from("manutencoes").update(tentativa).eq("id", m.id));
       }
       if (error) throw error;
+
+      const pendencias = [
+        soUmaNota && "só uma nota ficou anexada (falta rodar a migração 0019)",
+        semGarantia && "a garantia não foi gravada (falta rodar a migração 0024)",
+      ].filter(Boolean);
       setMsg({
         ok: true,
-        txt: soUmaNota
-          ? "Salvo, mas só uma nota ficou anexada: a migração 0019 ainda não rodou no Supabase."
-          : "Salvo.",
+        txt: pendencias.length ? `Salvo, mas ${pendencias.join("; e ")}.` : "Salvo.",
       });
       // A lista de escolhidos zera: o que foi enviado agora aparece no cartão, e
       // deixar os arquivos no campo faria o próximo "salvar" reenviar tudo.
@@ -347,6 +373,7 @@ function CartaoManutencao({
         <Placa>{v?.placa}</Placa>
         <span className="text-[13px] text-slate-500">{v?.modelo}</span>
         <Badge tom={TOM_STATUS[m.status] ?? "mudo"}>{m.status}</Badge>
+        {ehGarantia(m.garantia) && <Badge tom="info">{rotuloDaGarantia(m.garantia)}</Badge>}
         {m.prioridade && <span className="text-[11.5px] text-slate-500">{m.prioridade}</span>}
         <span className="ml-auto text-sm font-semibold tabular-nums text-slate-900">
           {emReais(m.valor_final ?? m.orcamento)}
@@ -358,6 +385,7 @@ function CartaoManutencao({
         Aberta {dataBR(m.aberta_em)}
         {m.origem ? " · " + m.origem : ""}
         {m.oficina ? " · " + m.oficina : ""}
+        {ehGarantia(m.garantia) ? " · em garantia: " + m.garantia.toLowerCase() : ""}
         {m.concluida_em ? " · concluída " + dataBR(m.concluida_em) : ""}
       </div>
 
@@ -423,6 +451,19 @@ function CartaoManutencao({
                 {tecnicos.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.nome}
+                  </option>
+                ))}
+              </Select>
+            </Campo>
+            {/* Quem cobre, quando o serviço não se paga. O caso comum é a
+                oficina refazendo o que fez — e é justamente esse que interessa
+                somar depois, para saber com quem reclamar. */}
+            <Campo rotulo="Garantia">
+              <Select value={garantia} onChange={(e) => setGarantia(e.target.value)}>
+                <option value="">Não é garantia</option>
+                {GARANTIAS.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
                   </option>
                 ))}
               </Select>
@@ -528,12 +569,14 @@ function NovaManutencao({
   const [resp, setResp] = useState("");
   const [oficina, setOficina] = useState("");
   const [orcamento, setOrcamento] = useState("");
+  const [garantia, setGarantia] = useState("");
   // O marco de revisão que esta preventiva atende. É o que resolve o escopo do
   // modelo, e é uma decisão de quem abre — por isso é campo, e não conta.
   const [revisaoKm, setRevisaoKm] = useState("");
   const [bloquear, setBloquear] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoGarantia, setAvisoGarantia] = useState<string | null>(null);
   // id da ordem recem-aberta: e so para oferecer a impressao na hora, que e
   // quando o veiculo ainda esta na mao de quem vai levar para a oficina.
   const [criadaId, setCriadaId] = useState<string | null>(null);
@@ -547,25 +590,42 @@ function NovaManutencao({
     }
     setSalvando(true);
     const supabase = createClient();
-    const { data: criada, error } = await supabase
+    const campos: Record<string, unknown> = {
+      veiculo_id: veiculoId,
+      km_abertura: paraInteiro(km),
+      origem: origem || null,
+      tipo: tipo || null,
+      descricao_problema: problema.trim(),
+      prioridade: prioridade || null,
+      responsavel_id: resp || null,
+      oficina: oficina.trim() || null,
+      orcamento: paraDecimal(orcamento),
+      garantia: garantia || null,
+      // Só na preventiva: numa corretiva o marco não quer dizer nada, e
+      // gravá-lo faria a ordem de serviço imprimir uma lista que ninguém pediu.
+      revisao_km: tipo === "PREVENTIVA" ? paraInteiro(revisaoKm) : null,
+      status: "ABERTA",
+    };
+    let { data: criada, error } = await supabase
       .from("manutencoes")
-      .insert({
-        veiculo_id: veiculoId,
-        km_abertura: paraInteiro(km),
-        origem: origem || null,
-        tipo: tipo || null,
-        descricao_problema: problema.trim(),
-        prioridade: prioridade || null,
-        responsavel_id: resp || null,
-        oficina: oficina.trim() || null,
-        orcamento: paraDecimal(orcamento),
-        // Só na preventiva: numa corretiva o marco não quer dizer nada, e
-        // gravá-lo faria a ordem de serviço imprimir uma lista que ninguém pediu.
-        revisao_km: tipo === "PREVENTIVA" ? paraInteiro(revisaoKm) : null,
-        status: "ABERTA",
-      })
+      .insert(campos)
       .select("id")
       .single();
+
+    // Antes da 0024 a coluna `garantia` não existe. Recusar a abertura inteira
+    // por causa dela deixaria o gestor sem registrar um veículo que já está
+    // parado — abre sem a garantia e avisa o que ficou de fora.
+    if (error && faltaMigracaoDaGarantia(error) && /garantia/i.test(error.message ?? "")) {
+      delete campos.garantia;
+      ({ data: criada, error } = await supabase
+        .from("manutencoes")
+        .insert(campos)
+        .select("id")
+        .single());
+      if (!error && garantia) {
+        setAvisoGarantia("A manutenção foi aberta, mas a garantia não ficou gravada: falta rodar a migração 0024 no Supabase.");
+      }
+    }
     if (error) {
       setErro(error.message);
       setSalvando(false);
@@ -597,6 +657,7 @@ function NovaManutencao({
   return (
     <Cartao titulo="Abrir manutenção" className="mb-3 ring-brand-300">
       <form onSubmit={criar} className="p-4">
+        {avisoGarantia && <div className="mb-3.5"><Aviso>{avisoGarantia}</Aviso></div>}
         {criadaId && (
           <div className="mb-3.5 rounded-lg bg-emerald-50 p-3.5 ring-1 ring-inset ring-emerald-200">
             <div className="text-[13.5px] font-semibold text-emerald-800">Manutenção aberta.</div>
@@ -672,6 +733,19 @@ function NovaManutencao({
             valor={orcamento}
             onValor={setOrcamento}
           />
+          {/* Marcar já na abertura é o que faz a ordem sair impressa com o
+              aviso de não cobrar — depois de o papel ir para a oficina, avisar
+              custa um telefonema. */}
+          <Campo rotulo="Garantia">
+            <Select value={garantia} onChange={(e) => setGarantia(e.target.value)}>
+              <option value="">Não é garantia</option>
+              {GARANTIAS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </Select>
+          </Campo>
         </div>
 
         {/* O escopo aparece ANTES de abrir, e não só no papel impresso: quem
