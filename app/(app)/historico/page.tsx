@@ -70,6 +70,16 @@ type Registro = {
 const AVARIA_ONDE = ["FRENTE", "TRASEIRA", "LATERAL DIREITA", "LATERAL ESQUERDA", "INTERIOR", "RODAS/PNEUS", "OUTRO"];
 const AVARIA_TIPO = ["AMASSADO", "ARRANHÃO", "QUEBRA", "LANTERNA/FAROL", "PNEU", "RETROVISOR", "OUTRO"];
 
+/** O nome do ângulo de uma foto, quando a vistoria guardou. O mapa é
+ *  `{ url: "lateral_esquerda" }`; aqui vira "lateral esquerda". */
+function rotuloDoAngulo(mapa: unknown, url: string): string {
+  const chave =
+    mapa && typeof mapa === "object"
+      ? (mapa as Record<string, unknown>)[url]
+      : undefined;
+  return typeof chave === "string" && chave ? chave.replace(/_/g, " ") : "semanal";
+}
+
 const TOM_TIPO: Record<string, Tom> = {
   CHECKLIST: "info",
   ROTEIRO: "ok",
@@ -182,7 +192,13 @@ export default function HistoricoPage() {
       // aqui sem nenhuma foto de avaria.
       const avarias = avariasDe(itens);
       const fotos: Foto[] = [
-        ...urls(itens.fotos_semanais).map((u) => ({ url: u, legenda: "semanal", semanal: true })),
+        // O ângulo, quando a vistoria foi feita no formulário guiado. Vistoria
+        // antiga não tem o mapa e continua saindo como "semanal".
+        ...urls(itens.fotos_semanais).map((u) => ({
+          url: u,
+          legenda: rotuloDoAngulo(itens.angulos, u),
+          semanal: true,
+        })),
         ...avarias.flatMap((a, i) =>
           a.fotos.map((u) => ({
             url: u,

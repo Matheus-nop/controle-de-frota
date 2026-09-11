@@ -597,6 +597,43 @@ primeira versão com a avaria da segunda. Só apareceu porque o teste conferia o
 total de fotos antes e depois — a soma dava 6 onde havia 5. Hoje a função copia,
 e essa conferência de total virou caso permanente.
 
+### Checklist guiado, e o defeito das cinco fotos (feito, 2026-09-11)
+Relato do campo: o técnico da Saveiro clicava em "escolher arquivo" **cinco
+vezes**, uma foto por vez, e o checklist subia **uma**.
+
+**Era o sistema, não ele.** O `<input type="file">` SUBSTITUI a seleção inteira a
+cada escolha, e as telas guardavam `e.target.files` direto — a quinta foto
+apagava as quatro anteriores. Escolher as cinco de uma vez funcionava, que é
+justamente o que ninguém adivinha sozinho, ainda mais no celular, em pé ao lado
+do veículo, onde a galeria abre uma foto por vez. Reproduzido em navegador antes
+de mexer em qualquer coisa.
+
+**A correção virou duas peças no kit:**
+
+- **`CampoFoto`** — uma vaga nomeada, uma foto. É o checklist guiado: FRONTAL,
+  LATERAL ESQUERDA, LATERAL DIREITA, TRASEIRA, PAINEL, na ordem de quem anda em
+  volta do veículo. Nas semanais o defeito **deixa de existir por construção**:
+  não há seleção múltipla para substituir.
+- **`CampoFotos`** — acumula escolhas, com miniatura e botão de remover. Vale
+  onde a quantidade é livre: fotos de avaria, foto de bloqueio e a tela de
+  ocorrência, que tinha o mesmo defeito.
+
+As miniaturas não são enfeite: sem elas não dá para saber o que está anexado, e
+é por isso que o defeito passou tanto tempo despercebido.
+
+**O que muda no dado.** `fotos_semanais` continua a lista achatada, na ordem dos
+ângulos — é o que o histórico, o comparativo e a reclassificação já leem, e nada
+quebrou. Ao lado vem `angulos`, um mapa `{ url: "lateral_esquerda" }` só para dar
+nome. Vistoria antiga não tem o mapa e continua aparecendo como "semanal".
+
+O ângulo abre uma porta que ainda não foi usada: **comparar traseira com
+traseira**, em vez de traseira com lateral. O `/comparativo` hoje mostra as fotos
+semanais lado a lado sem alinhar por ângulo — com o mapa, dá para alinhar.
+
+**A validação passou a nomear o que falta**: "Faltam as fotos: traseira, painel"
+em vez de "as fotos são obrigatórias", que faz a pessoa reler o formulário
+inteiro procurando o que esqueceu. As cinco são exigidas.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
