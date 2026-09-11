@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Camera, GitCompareArrows } from "lucide-react";
+import { ArrowRight, Camera, GitCompareArrows, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { avariasDe, resumoDaAvaria, urls, type Avaria } from "@/lib/frota/avarias";
 import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
@@ -10,12 +10,14 @@ import { dataBR } from "@/lib/frota/tempo";
 import { emKm } from "@/lib/frota/numero";
 import {
   Badge,
+  BotaoLink,
   Campo,
   Cartao,
   Carregando,
   Pagina,
   Placa,
   Select,
+  TiraDeFotos,
   Vazio,
   cx,
 } from "@/components/ui";
@@ -111,20 +113,14 @@ function Coluna({
                 {a.descricao && (
                   <div className="mt-0.5 text-[12px] text-slate-600">{a.descricao}</div>
                 )}
-                {a.fotos.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {a.fotos.map((u, k) => (
-                      <a key={k} href={u} target="_blank" rel="noopener noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={u}
-                          alt={`avaria ${i + 1} foto ${k + 1}`}
-                          className="h-20 w-20 rounded object-cover ring-1 ring-slate-300"
-                        />
-                      </a>
-                    ))}
-                  </div>
-                )}
+                <TiraDeFotos
+                  className="mt-2"
+                  tamanho="sm"
+                  fotos={a.fotos.map((u, k) => ({
+                    url: u,
+                    legenda: `${resumoDaAvaria(a)} · ${k + 1}`,
+                  }))}
+                />
               </div>
             );
           })}
@@ -137,18 +133,13 @@ function Coluna({
             <Camera size={13} />
             Fotos da volta do veículo
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {v.fotosSemanais.map((u, k) => (
-              <a key={k} href={u} target="_blank" rel="noopener noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={u}
-                  alt={`semanal ${k + 1}`}
-                  className="h-20 w-20 rounded object-cover ring-1 ring-slate-300"
-                />
-              </a>
-            ))}
-          </div>
+          <TiraDeFotos
+            tamanho="sm"
+            fotos={v.fotosSemanais.map((u, k) => ({
+              url: u,
+              legenda: `${dataBR(v.data)} · foto ${k + 1}`,
+            }))}
+          />
         </div>
       )}
     </Cartao>
@@ -304,6 +295,15 @@ function Comparativo() {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             {veiculo && <Placa>{veiculo.placa}</Placa>}
             <span className="text-[13px] text-slate-500">{veiculo?.modelo}</span>
+            {/* O relatório é a mesma comparação em papel, para a reunião: as
+                fotos grandes, com data e técnico do lado. Mora fora da casca do
+                app, como a ordem de serviço. */}
+            {a && b && (
+              <BotaoLink href={`/comparativo/relatorio?a=${a.id}&b=${b.id}`} tamanho="sm">
+                <Printer size={13} />
+                Relatório para reunião
+              </BotaoLink>
+            )}
             {a && b && (
               <span
                 className={cx(
