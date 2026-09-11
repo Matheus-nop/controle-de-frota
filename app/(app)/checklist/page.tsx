@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { avariasDe, resumoDaAvaria, type Avaria } from "@/lib/frota/avarias";
+import { AVARIA_ONDE, AVARIA_TIPO, avariasDe, resumoDaAvaria, type Avaria } from "@/lib/frota/avarias";
 import { emKm, paraInteiro } from "@/lib/frota/numero";
 import { dataBR, hojeBR } from "@/lib/frota/tempo";
 import { enviarFoto, enviarFotos } from "@/lib/frota/foto";
 import { mensagemDeErro } from "@/lib/frota/erro";
+import { ANGULOS } from "@/lib/frota/angulos";
+import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
 import {
   Aviso,
   Badge,
@@ -59,25 +61,7 @@ const ITENS_RAPIDO: [string, string][] = [
   ["barulho", "Veículo apresenta barulho ou comportamento estranho?"],
 ];
 
-/**
- * As cinco fotos da vistoria semanal, na ordem em que se anda em volta do
- * veículo: frente, lado esquerdo, lado atrás, lado direito — e por último o
- * painel, que é dentro.
- *
- * Ter ângulo nomeado não é só organização. É o que permite comparar a traseira
- * de hoje com a traseira da semana passada, em vez de comparar traseira com
- * lateral e não concluir nada.
- */
-const ANGULOS: [string, string, string][] = [
-  ["frontal", "Frontal", "A frente inteira, com a placa visível."],
-  ["lateral_esquerda", "Lateral esquerda", "Do lado do motorista, o veículo inteiro."],
-  ["lateral_direita", "Lateral direita", "Do lado do passageiro, o veículo inteiro."],
-  ["traseira", "Traseira", "A traseira inteira, com a placa visível."],
-  ["painel", "Painel", "Com o hodômetro legível — é o km desta vistoria."],
-];
 
-const AVARIA_ONDE = ["FRENTE", "TRASEIRA", "LATERAL DIREITA", "LATERAL ESQUERDA", "INTERIOR", "RODAS/PNEUS", "OUTRO"];
-const AVARIA_TIPO = ["AMASSADO", "ARRANHÃO", "QUEBRA", "LANTERNA/FAROL", "PNEU", "RETROVISOR", "OUTRO"];
 const AVARIA_EXISTIA = ["NÃO, É NOVA", "SIM, JÁ EXISTIA", "NÃO SEI INFORMAR"];
 const MOTIVOS = ["PNEU", "FREIO", "MOTOR", "ELÉTRICA", "LUZ DE PAINEL", "BARULHO", "VIDRO", "AR CONDICIONADO", "AVARIA GRAVE", "DOCUMENTO", "OUTROS"];
 const URGENCIAS = ["BAIXA", "MÉDIA", "ALTA", "EMERGENCIAL"];
@@ -151,8 +135,10 @@ function UltimoChecklist({ a }: { a: Anterior }) {
             {a.avarias.map((av, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2 text-[12.5px] text-slate-700">
                 <span className="font-semibold">{resumoDaAvaria(av)}</span>
-                {av.reclassificada_por && (
-                  <span className="text-[11px] text-slate-500">marcada pelo gestor</span>
+                {(av.reclassificada_por || av.anexada_por) && (
+                  <span className="text-[11px] text-slate-500">
+                    {av.anexada_por ? "foto anexada pelo gestor" : "marcada pelo gestor"}
+                  </span>
                 )}
                 {av.descricao && <span className="text-slate-500">{av.descricao}</span>}
                 {av.fotos.map((u, k) => (
@@ -245,12 +231,22 @@ export default function ChecklistPage() {
         return;
       }
       const supabase = createClient();
-      const { data } = await supabase
-        .from("checklists")
-        .select("data, km_atual, apto, itens, tecnico:tecnico_id(nome)")
-        .eq("veiculo_id", veiculoId)
-        .order("data", { ascending: false })
-        .limit(1);
+      // Vistoria anulada não é a vistoria anterior de ninguém: o gestor a tirou
+      // do ar justamente porque ela estava errada. Enquanto a 0017 não rodar, a
+      // coluna não existe e a consulta vai sem o filtro — melhor mostrar a
+      // vistoria anterior do que deixar o técnico sem tela.
+      const buscar = (comAnulacao: boolean) => {
+        const q = supabase
+          .from("checklists")
+          .select("data, km_atual, apto, itens, tecnico:tecnico_id(nome)")
+          .eq("veiculo_id", veiculoId);
+        return (comAnulacao ? q.is("anulada_em", null) : q)
+          .order("data", { ascending: false })
+          .limit(1);
+      };
+      let resposta = await buscar(true);
+      if (faltaMigracaoDaAnulacao(resposta.error)) resposta = await buscar(false);
+      const { data } = resposta;
       if (!valeu) return;
       const c = (data ?? [])[0] as
         | { data: string; km_atual: number | null; apto: boolean; itens: unknown; tecnico: { nome: string } | { nome: string }[] | null }

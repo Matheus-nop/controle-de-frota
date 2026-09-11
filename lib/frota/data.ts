@@ -12,6 +12,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { SEED_DADOS } from "./seed";
 import { diaDe, duracaoEntre, horaDe, hojeBR } from "./tempo";
+import { faltaMigracaoDaAnulacao } from "./anulacao";
 import type {
   AlertaAtivoDados,
   Dados,
@@ -181,13 +182,21 @@ export async function carregarDados(): Promise<ResultadoDados> {
       supabase
         .from("manutencoes")
         .select("*, veiculo:veiculo_id(placa,modelo), responsavel:responsavel_id(nome)"),
+      // A anulada sai de tudo: o painel conta vistoria feita, e ela não foi.
       supabase
         .from("checklists")
-        .select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)"),
+        .select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)")
+        .is("anulada_em", null),
       // Se a migration 0007 ainda nao rodou, isto volta com erro e vira lista
       // vazia — o painel perde o contador, nao a pagina.
       supabase.from("v_alertas_ativos").select("*").order("ordem"),
     ]);
+
+    // Antes da 0017 a coluna não existe: refaz sem o filtro em vez de o painel
+    // perder a lista de checklists inteira.
+    const checklists = faltaMigracaoDaAnulacao(chk.error)
+      ? await supabase.from("checklists").select("*, veiculo:veiculo_id(placa,modelo), tecnico:tecnico_id(nome)")
+      : chk;
 
     const veiculos = (veic.data ?? []).map(mapVeiculo);
 
@@ -202,7 +211,7 @@ export async function carregarDados(): Promise<ResultadoDados> {
         roteiros: (rot.data ?? []).map(mapRoteiro),
         custos: (cst.data ?? []).map(mapCusto),
         manutencoes: (man.data ?? []).map(mapManutencao),
-        checklists: (chk.data ?? []).map(mapChecklist),
+        checklists: (checklists.data ?? []).map(mapChecklist),
         // sem mapeamento: a view ja devolve no formato da tela
         alertas: (alr.data ?? []) as AlertaAtivoDados[],
       },
