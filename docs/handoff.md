@@ -745,6 +745,43 @@ arquivo quando ele usa o notebook.
 antigo. O endereço delas não muda e nada se perde; mover arquivo de balde para
 combinar com a correção seria trocar prova de lugar por estética.
 
+### Dar ciência num alerta (feito, 2026-09-11) — migração **0018**
+"Como funciona o alerta de avaria, para que não fique crescendo o tempo todo?"
+
+**Como a fila funciona.** `v_alertas_ativos` não guarda nada: é uma view, e os
+cinco alertas são recalculados a cada abertura da tela. Não existe fila que
+cresce — existe uma pergunta refeita. O de AVARIA compara as duas últimas
+vistorias do veículo e some sozinho de três jeitos: a vistoria seguinte registra
+a mesma quantidade de dano (o amassado continua lá, e deixou de ser novidade),
+a vistoria passa de 60 dias, ou a vistoria é anulada. São no máximo nove linhas
+de AVARIA, uma por veículo.
+
+**O que faltava.** Entre o alerta aparecer e a vistoria seguinte pode passar uma
+semana, e nessa semana ele fica vermelho depois de o gestor já ter visto e
+resolvido. Alerta que continua vermelho depois de resolvido ensina a ignorar a
+tela — e o dia em que ele importar de verdade, ninguém vai olhar.
+
+**`alertas_ciencia`** grava quem viu, quando e por quê. Não muda dado nenhum.
+`v_alertas` traz tudo com a ciência ao lado; `v_alertas_ativos` passou a ser
+`select … where ciencia_em is null`, então o contador do painel cai junto sem
+precisar mexer no painel.
+
+**A chave é a OCORRÊNCIA, não o veículo.** Cada alerta carrega uma `referencia` —
+para AVARIA, o id da vistoria que o disparou; para REVISÃO, o marco de km. Se
+outra vistoria achar mais dano, a referência é outra e o alerta volta. Dar
+ciência silencia o que se viu, nunca o próximo: sem isso, um clique distraído
+cegaria o veículo para sempre. **Provado num Postgres local**, incluindo a volta
+do alerta na vistoria seguinte.
+
+**RLS provada:** técnico barrado no insert (`insufficient_privilege`) e no delete
+(`DELETE 0`); PCM e gestor escrevem; todos leem, porque esconder a aba de "já
+vistos" do PCM só faria ele dar ciência de novo no que o gestor tratou.
+
+> Cuidado de teste que custou uma rodada: `set local role` só vale dentro de
+> transação. Fora dela o teste roda como superusuário, que ignora RLS — a
+> primeira versão "provou" que o técnico conseguia apagar, e era o teste que
+> estava errado, não a policy.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`

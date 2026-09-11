@@ -49,6 +49,7 @@ mesmo dia. Mudou lá, muda aqui.
 - [~] Fase 7 — avarias em lista, alerta de avaria nova, comparativo de vistorias
       e escopo de manutenção por modelo
 - [~] Fase 8 — correção de vistoria pelo gestor (reclassificar, anexar foto,
-      trocar veículo, excluir/anular) e o envio de foto que aguenta 4G de rua
+      trocar veículo, excluir/anular), o envio de foto que aguenta 4G de rua e
+      ciência nos alertas
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.
