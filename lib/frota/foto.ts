@@ -30,12 +30,15 @@ export async function enviarFoto(
  * Mesma coisa, para os `<input type=file multiple>` do checklist. O índice
  * entra no nome porque `Date.now()` é o mesmo para o lote inteiro — sem ele a
  * segunda foto sobrescreveria a primeira.
+ *
+ * Aceita `File[]` além de `FileList`: o `CampoFotos` do kit acumula as escolhas
+ * numa lista própria, porque o input nativo substitui a seleção a cada vez.
  */
 export async function enviarFotos(
   supabase: SupabaseClient,
   balde: string,
   prefixo: string,
-  arquivos: FileList | null,
+  arquivos: FileList | File[] | null,
 ): Promise<string[]> {
   if (!arquivos || arquivos.length === 0) return [];
   const carimbo = Date.now();

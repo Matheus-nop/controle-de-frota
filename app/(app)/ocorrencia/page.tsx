@@ -10,6 +10,7 @@ import {
   Botao,
   BotaoLink,
   Campo,
+  CampoFotos,
   Cartao,
   Carregando,
   Checkbox,
@@ -55,7 +56,10 @@ export default function OcorrenciaPage() {
   const [gravidade, setGravidade] = useState("");
   const [terceiros, setTerceiros] = useState(false);
   const [descricao, setDescricao] = useState("");
-  const [fotos, setFotos] = useState<FileList | null>(null);
+  // `File[]` e não `FileList`: o input nativo substitui a seleção a cada
+  // escolha, e quem fotografa um dano tira uma foto de cada vez. Ver o defeito
+  // que isso causou no checklist em `CampoFotos`, no kit.
+  const [fotos, setFotos] = useState<File[]>([]);
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -105,7 +109,7 @@ export default function OcorrenciaPage() {
       setErro("Preencha veículo, tipo, gravidade e a descrição do que aconteceu.");
       return;
     }
-    if (!fotos || fotos.length === 0) {
+    if (fotos.length === 0) {
       setErro("A foto é obrigatória. Fotografe o dano antes de enviar.");
       return;
     }
@@ -173,7 +177,7 @@ export default function OcorrenciaPage() {
                 setLocal("");
                 setDescricao("");
                 setTerceiros(false);
-                setFotos(null);
+                setFotos([]);
                 setData(hoje);
               }}
             >
@@ -309,17 +313,12 @@ export default function OcorrenciaPage() {
 
           <Cartao titulo="3 · Fotos (obrigatórias)">
             <div className="p-4">
-              <Campo rotulo="Fotografe o dano de perto e de longe">
-                <Input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  required
-                  onChange={(e) => setFotos(e.target.files)}
-                  className="file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
-                />
-              </Campo>
+              <CampoFotos
+                rotulo="Fotografe o dano de perto e de longe"
+                dica="Pode tirar uma de cada vez — elas somam."
+                arquivos={fotos}
+                onArquivos={setFotos}
+              />
             </div>
           </Cartao>
 

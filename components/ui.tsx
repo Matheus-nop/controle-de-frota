@@ -18,6 +18,7 @@ import { X } from "lucide-react";
 import { emKm, emKmPorLitro, emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
 import {
   useEffect,
+  useMemo,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -179,6 +180,208 @@ export function CampoNumero({
         onChange={(e) => onValor(e.target.value)}
       />
     </Campo>
+  );
+}
+
+/**
+ * Campo de fotos que ACUMULA escolhas.
+ *
+ * Existe por um defeito relatado do campo: o técnico da Saveiro clicava em
+ * "escolher arquivo" cinco vezes, uma foto por vez, e o checklist subia UMA.
+ *
+ * A causa é do `<input type="file">`, não da pessoa: cada escolha SUBSTITUI a
+ * seleção inteira. As telas guardavam o `e.target.files` direto, então a quinta
+ * foto apagava as quatro anteriores. Escolher as cinco de uma vez funcionava —
+ * e é justamente o que ninguém adivinha sozinho, ainda mais no celular, em pé
+ * ao lado do veículo, onde a galeria abre uma foto por vez.
+ *
+ * Aqui a lista é do componente, não do input: cada escolha soma. O input é
+ * zerado depois de cada uma, senão escolher a MESMA foto de novo não dispara
+ * evento nenhum — e o técnico ficaria clicando sem entender por que nada
+ * acontece.
+ *
+ * As miniaturas não são enfeite: sem elas não dá para saber o que está
+ * anexado, que é o que fez o defeito passar tanto tempo despercebido.
+ */
+export function CampoFotos({
+  rotulo,
+  dica,
+  arquivos,
+  onArquivos,
+  className,
+  accept = "image/*",
+}: {
+  rotulo: string;
+  dica?: ReactNode;
+  arquivos: File[];
+  onArquivos: (f: File[]) => void;
+  className?: string;
+  accept?: string;
+}) {
+  // Miniatura de cada arquivo. O endereço é revogado quando a lista muda, senão
+  // cada troca de foto deixa um blob preso na memória do celular.
+  const previas = useMemo(
+    () => arquivos.map((f) => ({ nome: f.name, url: URL.createObjectURL(f) })),
+    [arquivos],
+  );
+  useEffect(() => {
+    return () => previas.forEach((p) => URL.revokeObjectURL(p.url));
+  }, [previas]);
+
+  // Mesma foto escolhida duas vezes não entra duas vezes. Nome sozinho não
+  // basta: a câmera do celular repete nome o tempo todo.
+  const chave = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
+
+  function somar(lista: FileList | null) {
+    if (!lista || lista.length === 0) return;
+    const tinha = new Set(arquivos.map(chave));
+    const novos = Array.from(lista).filter((f) => !tinha.has(chave(f)));
+    if (novos.length) onArquivos([...arquivos, ...novos]);
+  }
+
+  return (
+    <Campo
+      rotulo={rotulo}
+      className={className}
+      dica={
+        arquivos.length === 0 ? (
+          dica
+        ) : (
+          <span className="font-semibold text-slate-700">
+            {arquivos.length} foto(s) anexada(s)
+            {dica ? <span className="font-normal text-slate-500"> · {dica}</span> : null}
+          </span>
+        )
+      }
+    >
+      <input
+        type="file"
+        accept={accept}
+        multiple
+        onChange={(e) => {
+          somar(e.target.files);
+          // Zera para a próxima escolha disparar evento mesmo se for o mesmo
+          // arquivo, e para o "N arquivos" nativo não contradizer a lista.
+          e.target.value = "";
+        }}
+        className="campo file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+      />
+
+      {previas.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {previas.map((p, i) => (
+            <div key={p.url} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={p.url}
+                alt={p.nome}
+                className="block h-[72px] w-[72px] rounded-lg object-cover ring-1 ring-slate-200"
+              />
+              <button
+                type="button"
+                aria-label={`Remover ${p.nome}`}
+                onClick={() => onArquivos(arquivos.filter((_, k) => k !== i))}
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-slate-800 p-1 text-white shadow ring-2 ring-white hover:bg-red-600"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Campo>
+  );
+}
+
+/**
+ * Uma vaga de foto, com nome e lugar certo.
+ *
+ * É a peça do checklist guiado: em vez de "anexe as fotos do veículo", o
+ * técnico vê FRONTAL, LATERAL ESQUERDA, LATERAL DIREITA, TRASEIRA e PAINEL, uma
+ * de cada vez. Duas coisas melhoram de uma vez:
+ *
+ * - some o defeito das cinco escolhas (cada vaga guarda UMA foto, então não há
+ *   seleção para substituir);
+ * - a foto passa a ter ângulo conhecido, e a traseira de hoje pode ser
+ *   comparada com a traseira da semana passada, e não com a lateral.
+ *
+ * Vaga preenchida mostra a miniatura e troca o texto do botão: em pé ao lado do
+ * veículo, saber o que já foi tirado é metade do trabalho.
+ */
+export function CampoFoto({
+  rotulo,
+  arquivo,
+  onArquivo,
+  dica,
+  obrigatoria,
+}: {
+  rotulo: string;
+  arquivo: File | null;
+  onArquivo: (f: File | null) => void;
+  dica?: ReactNode;
+  obrigatoria?: boolean;
+}) {
+  const previa = useMemo(() => (arquivo ? URL.createObjectURL(arquivo) : null), [arquivo]);
+  useEffect(() => {
+    return () => {
+      if (previa) URL.revokeObjectURL(previa);
+    };
+  }, [previa]);
+
+  return (
+    <div
+      className={cx(
+        "rounded-lg p-3 ring-1 ring-inset transition",
+        arquivo ? "bg-emerald-50/50 ring-emerald-300" : "bg-white ring-slate-300",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        {previa ? (
+          <div className="relative shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previa}
+              alt={rotulo}
+              className="block h-[64px] w-[64px] rounded-lg object-cover ring-1 ring-emerald-300"
+            />
+            <button
+              type="button"
+              aria-label={`Remover foto ${rotulo}`}
+              onClick={() => onArquivo(null)}
+              className="absolute -right-1.5 -top-1.5 rounded-full bg-slate-800 p-1 text-white shadow ring-2 ring-white hover:bg-red-600"
+            >
+              <X size={11} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[11px] font-bold text-slate-400 ring-1 ring-inset ring-slate-200">
+            sem foto
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[13.5px] font-bold text-slate-800">{rotulo}</span>
+            {obrigatoria && !arquivo && (
+              <span className="text-[11px] font-semibold text-red-600">obrigatória</span>
+            )}
+          </div>
+          {dica && <div className="mt-0.5 text-[11.5px] text-slate-500">{dica}</div>}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              onArquivo(e.target.files?.[0] ?? null);
+              // Zera para dar para escolher a MESMA foto de novo depois de
+              // remover — sem isso o input não dispara evento e parece travado.
+              e.target.value = "";
+            }}
+            className="campo mt-1.5 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 

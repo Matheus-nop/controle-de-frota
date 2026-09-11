@@ -554,6 +554,86 @@ Intervalos levantados, para conferir contra o manual:
 O caminho combinado: o PCM tira foto das páginas do plano de manutenção dos
 manuais (estão na porta-luvas; a concessionária tem todos) e elas viram SQL.
 
+### O gestor reclassifica foto de vistoria (feito, 2026-09-11)
+Na primeira semana de uso apareceu o caso: o técnico mandou **onze fotos, todas
+marcadas como semanal**, e várias eram dano — farol quebrado, porta amassada. A
+vistoria ficou com zero avaria. Consequência em cadeia: o alerta de avaria nova
+não dispara, o comparativo da semana seguinte não tem com o que comparar, e o
+filtro de avaria não acha nada.
+
+Pedir para o técnico refazer não resolve — ele entregou o veículo e foi para a
+rua. Quem consegue olhar a foto e dizer "isto é a traseira amassada" é o gestor,
+depois, na mesa.
+
+**Onde:** `/historico`, botão **Reclassificar fotos** no cartão de qualquer
+checklist. Abre com as fotos semanais daquela vistoria; o gestor marca as que são
+dano, diz onde e o tipo, e elas viram uma avaria.
+
+**Isto não é reescrever o passado, e a diferença importa.** A foto continua a
+mesma, tirada na mesma hora, e nada se apaga: as duas funções
+(`reclassificarComoAvaria`, `desfazerReclassificacao`, em `lib/frota/avarias.ts`)
+só movem URLs entre `fotos_semanais` e `avarias` do mesmo registro. E a mudança
+fica **assinada**: `reclassificada_por` e `reclassificada_em` em toda avaria
+criada assim.
+
+A marca aparece em todo lugar que mostra a avaria — histórico ("avaria
+(reclassificada)"), comparativo (crachá com o nome de quem marcou) e no cartão do
+técnico ("marcada pelo gestor"). Numa discussão sobre quando o dano apareceu,
+"o técnico registrou na rua" e "o gestor reconheceu depois" não valem a mesma
+coisa, e a tela não esconde isso.
+
+**Sem migração.** A policy `checklists_update` já é `is_gestor()` desde a 0004 —
+o PCM lê o histórico mas não reclassifica, e recebe um aviso em português em vez
+de erro de RLS.
+
+**Desfazer só desfaz o que o gestor fez.** Avaria registrada em campo pelo
+técnico não se apaga por essa tela: corrigir o que outra pessoa viu na rua é
+outra conversa.
+
+**Um defeito que o teste pegou antes de sair:** `listaDeAvarias` devolvia a
+referência da lista de dentro do `itens`, e o `push` da reclassificação escrevia
+no objeto que veio de fora. Reclassificar duas fotos em seguida deixava a
+primeira versão com a avaria da segunda. Só apareceu porque o teste conferia o
+total de fotos antes e depois — a soma dava 6 onde havia 5. Hoje a função copia,
+e essa conferência de total virou caso permanente.
+
+### Checklist guiado, e o defeito das cinco fotos (feito, 2026-09-11)
+Relato do campo: o técnico da Saveiro clicava em "escolher arquivo" **cinco
+vezes**, uma foto por vez, e o checklist subia **uma**.
+
+**Era o sistema, não ele.** O `<input type="file">` SUBSTITUI a seleção inteira a
+cada escolha, e as telas guardavam `e.target.files` direto — a quinta foto
+apagava as quatro anteriores. Escolher as cinco de uma vez funcionava, que é
+justamente o que ninguém adivinha sozinho, ainda mais no celular, em pé ao lado
+do veículo, onde a galeria abre uma foto por vez. Reproduzido em navegador antes
+de mexer em qualquer coisa.
+
+**A correção virou duas peças no kit:**
+
+- **`CampoFoto`** — uma vaga nomeada, uma foto. É o checklist guiado: FRONTAL,
+  LATERAL ESQUERDA, LATERAL DIREITA, TRASEIRA, PAINEL, na ordem de quem anda em
+  volta do veículo. Nas semanais o defeito **deixa de existir por construção**:
+  não há seleção múltipla para substituir.
+- **`CampoFotos`** — acumula escolhas, com miniatura e botão de remover. Vale
+  onde a quantidade é livre: fotos de avaria, foto de bloqueio e a tela de
+  ocorrência, que tinha o mesmo defeito.
+
+As miniaturas não são enfeite: sem elas não dá para saber o que está anexado, e
+é por isso que o defeito passou tanto tempo despercebido.
+
+**O que muda no dado.** `fotos_semanais` continua a lista achatada, na ordem dos
+ângulos — é o que o histórico, o comparativo e a reclassificação já leem, e nada
+quebrou. Ao lado vem `angulos`, um mapa `{ url: "lateral_esquerda" }` só para dar
+nome. Vistoria antiga não tem o mapa e continua aparecendo como "semanal".
+
+O ângulo abre uma porta que ainda não foi usada: **comparar traseira com
+traseira**, em vez de traseira com lateral. O `/comparativo` hoje mostra as fotos
+semanais lado a lado sem alinhar por ângulo — com o mapa, dá para alinhar.
+
+**A validação passou a nomear o que falta**: "Faltam as fotos: traseira, painel"
+em vez de "as fotos são obrigatórias", que faz a pessoa reler o formulário
+inteiro procurando o que esqueceu. As cinco são exigidas.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`

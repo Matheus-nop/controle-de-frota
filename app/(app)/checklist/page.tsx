@@ -6,13 +6,15 @@ import { createClient } from "@/lib/supabase/client";
 import { avariasDe, resumoDaAvaria, type Avaria } from "@/lib/frota/avarias";
 import { emKm, paraInteiro } from "@/lib/frota/numero";
 import { dataBR, hojeBR } from "@/lib/frota/tempo";
-import { enviarFotos } from "@/lib/frota/foto";
+import { enviarFoto, enviarFotos } from "@/lib/frota/foto";
 import {
   Aviso,
   Badge,
   Botao,
   BotaoLink,
   Campo,
+  CampoFoto,
+  CampoFotos,
   CampoNumero,
   Cartao,
   Carregando,
@@ -27,9 +29,9 @@ type Tecnico = { id: string; nome: string };
 
 /** Uma avaria enquanto está sendo digitada. Vira `Avaria` só na hora de salvar,
  *  quando as fotos já subiram e viraram URL. */
-type AvariaForm = { onde: string; tipo: string; existia: string; desc: string; fotos: FileList | null };
+type AvariaForm = { onde: string; tipo: string; existia: string; desc: string; fotos: File[] };
 
-const AVARIA_VAZIA: AvariaForm = { onde: "", tipo: "", existia: "", desc: "", fotos: null };
+const AVARIA_VAZIA: AvariaForm = { onde: "", tipo: "", existia: "", desc: "", fotos: [] };
 
 /** O checklist anterior do mesmo veículo, para o técnico conferir antes de
  *  registrar. Sem isto ele redigita a mesma avaria toda semana, ou deixa de
@@ -56,15 +58,28 @@ const ITENS_RAPIDO: [string, string][] = [
   ["barulho", "Veículo apresenta barulho ou comportamento estranho?"],
 ];
 
+/**
+ * As cinco fotos da vistoria semanal, na ordem em que se anda em volta do
+ * veículo: frente, lado esquerdo, lado atrás, lado direito — e por último o
+ * painel, que é dentro.
+ *
+ * Ter ângulo nomeado não é só organização. É o que permite comparar a traseira
+ * de hoje com a traseira da semana passada, em vez de comparar traseira com
+ * lateral e não concluir nada.
+ */
+const ANGULOS: [string, string, string][] = [
+  ["frontal", "Frontal", "A frente inteira, com a placa visível."],
+  ["lateral_esquerda", "Lateral esquerda", "Do lado do motorista, o veículo inteiro."],
+  ["lateral_direita", "Lateral direita", "Do lado do passageiro, o veículo inteiro."],
+  ["traseira", "Traseira", "A traseira inteira, com a placa visível."],
+  ["painel", "Painel", "Com o hodômetro legível — é o km desta vistoria."],
+];
+
 const AVARIA_ONDE = ["FRENTE", "TRASEIRA", "LATERAL DIREITA", "LATERAL ESQUERDA", "INTERIOR", "RODAS/PNEUS", "OUTRO"];
 const AVARIA_TIPO = ["AMASSADO", "ARRANHÃO", "QUEBRA", "LANTERNA/FAROL", "PNEU", "RETROVISOR", "OUTRO"];
 const AVARIA_EXISTIA = ["NÃO, É NOVA", "SIM, JÁ EXISTIA", "NÃO SEI INFORMAR"];
 const MOTIVOS = ["PNEU", "FREIO", "MOTOR", "ELÉTRICA", "LUZ DE PAINEL", "BARULHO", "VIDRO", "AR CONDICIONADO", "AVARIA GRAVE", "DOCUMENTO", "OUTROS"];
 const URGENCIAS = ["BAIXA", "MÉDIA", "ALTA", "EMERGENCIAL"];
-
-/** Estilo comum dos campos de arquivo: o botão nativo destoa do resto. */
-const CAMPO_ARQUIVO =
-  "file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-700";
 
 /**
  * Sim/Não em dois alvos grandes, no lugar de um `select`. São onze perguntas
@@ -135,6 +150,9 @@ function UltimoChecklist({ a }: { a: Anterior }) {
             {a.avarias.map((av, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2 text-[12.5px] text-slate-700">
                 <span className="font-semibold">{resumoDaAvaria(av)}</span>
+                {av.reclassificada_por && (
+                  <span className="text-[11px] text-slate-500">marcada pelo gestor</span>
+                )}
                 {av.descricao && <span className="text-slate-500">{av.descricao}</span>}
                 {av.fotos.map((u, k) => (
                   <a
@@ -180,9 +198,12 @@ export default function ChecklistPage() {
   const [motivo, setMotivo] = useState("");
   const [motivoDesc, setMotivoDesc] = useState("");
   const [urgencia, setUrgencia] = useState("");
-  const [fotoBloqueio, setFotoBloqueio] = useState<FileList | null>(null);
+  const [fotoBloqueio, setFotoBloqueio] = useState<File[]>([]);
 
-  const [fotosSemanais, setFotosSemanais] = useState<FileList | null>(null);
+  // Uma vaga por ângulo. Antes era um `<input multiple>` só, e o técnico da
+  // Saveiro descobriu do pior jeito que escolher uma foto de cada vez
+  // SUBSTITUÍA a anterior: cinco cliques, uma foto no banco.
+  const [fotosAngulo, setFotosAngulo] = useState<Record<string, File | null>>({});
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -249,7 +270,7 @@ export default function ChecklistPage() {
 
   const respondidas = ITENS_RAPIDO.filter(([k]) => rapido[k]).length;
 
-  function mudarAvaria(i: number, campo: keyof AvariaForm, valor: string | FileList | null) {
+  function mudarAvaria(i: number, campo: keyof AvariaForm, valor: string | File[]) {
     setAvarias((lista) => lista.map((a, k) => (k === i ? { ...a, [campo]: valor } : a)));
   }
 
@@ -269,18 +290,25 @@ export default function ChecklistPage() {
       setErro("O km atual precisa ser um número. Confira o hodômetro.");
       return;
     }
-    if (!fotosSemanais || fotosSemanais.length === 0) {
-      setErro("As fotos semanais (frente, traseira e laterais) são obrigatórias.");
+    // Nomeia o que falta. "As fotos são obrigatórias" faz a pessoa reler o
+    // formulário inteiro procurando o que esqueceu.
+    const faltando = ANGULOS.filter(([chave]) => !fotosAngulo[chave]).map(([, rotulo]) => rotulo);
+    if (faltando.length > 0) {
+      setErro(
+        faltando.length === 1
+          ? `Falta a foto ${faltando[0].toLowerCase()}.`
+          : `Faltam as fotos: ${faltando.join(", ").toLowerCase()}.`,
+      );
       return;
     }
-    if (apto === "NÃO" && (!motivo || !fotoBloqueio || fotoBloqueio.length === 0)) {
+    if (apto === "NÃO" && (!motivo || fotoBloqueio.length === 0)) {
       setErro("Veículo não apto: informe o motivo do bloqueio e a foto obrigatória.");
       return;
     }
 
     // Avaria marcada como SIM tem que ter ao menos uma preenchida: senão o
     // checklist diz "tem dano" e não diz qual, que é pior do que dizer NÃO.
-    const listaAvarias = novaAvaria === "SIM" ? avarias.filter((a) => a.onde || a.tipo || a.desc.trim() || a.fotos?.length) : [];
+    const listaAvarias = novaAvaria === "SIM" ? avarias.filter((a) => a.onde || a.tipo || a.desc.trim() || a.fotos.length) : [];
     if (novaAvaria === "SIM" && listaAvarias.length === 0) {
       setErro("Você marcou que há avaria nova: descreva ao menos uma, ou responda NÃO.");
       return;
@@ -289,10 +317,28 @@ export default function ChecklistPage() {
     setSalvando(true);
     try {
       const supabase = createClient();
-      const [fSemanais, fBloqueio] = await Promise.all([
-        enviarFotos(supabase, "checklists", `${veiculoId}/semanal`, fotosSemanais),
-        enviarFotos(supabase, "checklists", `${veiculoId}/bloqueio`, apto === "NÃO" ? fotoBloqueio : null),
-      ]);
+      // Cada ângulo sobe no próprio caminho, e o nome do arquivo no Storage já
+      // diz qual é — quem for olhar o balde por fora entende sem consultar nada.
+      const enviadas = await Promise.all(
+        ANGULOS.map(async ([chave]) => ({
+          chave,
+          url: await enviarFoto(supabase, "checklists", `${veiculoId}/${chave}`, fotosAngulo[chave]),
+        })),
+      );
+      const fBloqueio = await enviarFotos(
+        supabase,
+        "checklists",
+        `${veiculoId}/bloqueio`,
+        apto === "NÃO" ? fotoBloqueio : [],
+      );
+
+      // `fotos_semanais` continua sendo a lista achatada, na ordem dos ângulos:
+      // é o que o histórico, o comparativo e a reclassificação já leem. O mapa
+      // `angulos` vem ao lado, só para dar nome a cada uma — assim nada quebra
+      // e a informação nova não se perde.
+      const fSemanais = enviadas.map((e) => e.url).filter((u): u is string => !!u);
+      const angulos: Record<string, string> = {};
+      for (const e of enviadas) if (e.url) angulos[e.url] = e.chave;
 
       // Cada avaria sobe as suas fotos no próprio prefixo. O índice entra no
       // caminho para duas avarias da mesma vistoria não se misturarem no balde.
@@ -314,6 +360,7 @@ export default function ChecklistPage() {
         // `lib/frota/avarias.ts`, para as vistorias antigas não sumirem.
         avarias: avariasGravadas,
         fotos_semanais: fSemanais,
+        angulos,
         fotos_bloqueio: fBloqueio,
       };
 
@@ -534,15 +581,12 @@ export default function ChecklistPage() {
                           onChange={(e) => mudarAvaria(i, "desc", e.target.value)}
                         />
                       </Campo>
-                      <Campo rotulo="Foto da avaria">
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={(e) => mudarAvaria(i, "fotos", e.target.files)}
-                          className={CAMPO_ARQUIVO}
-                        />
-                      </Campo>
+                      <CampoFotos
+                        rotulo="Fotos da avaria"
+                        dica="De perto e de longe. Pode escolher uma de cada vez — elas somam."
+                        arquivos={a.fotos}
+                        onArquivos={(f) => mudarAvaria(i, "fotos", f)}
+                      />
                     </div>
                   ))}
                   {/* Uma vistoria acha dois amassados e um farol quebrado no
@@ -595,32 +639,35 @@ export default function ChecklistPage() {
                       ))}
                     </Select>
                   </Campo>
-                  <Campo rotulo="Foto obrigatória">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => setFotoBloqueio(e.target.files)}
-                      className={CAMPO_ARQUIVO}
-                    />
-                  </Campo>
+                  <CampoFotos
+                    rotulo="Foto obrigatória do problema"
+                    dica="Pode escolher uma de cada vez — elas somam."
+                    arquivos={fotoBloqueio}
+                    onArquivos={setFotoBloqueio}
+                  />
                 </div>
               )}
             </div>
           </Cartao>
 
-          <Cartao titulo="5 · Fotos semanais (obrigatórias)">
-            <div className="p-4">
-              <Campo rotulo="Frente, traseira e as duas laterais do veículo">
-                <Input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  required
-                  onChange={(e) => setFotosSemanais(e.target.files)}
-                  className={CAMPO_ARQUIVO}
+          <Cartao
+            titulo={`5 · Fotos do veículo (${Object.values(fotosAngulo).filter(Boolean).length} de ${ANGULOS.length})`}
+          >
+            <div className="space-y-2.5 p-4">
+              <p className="text-[12.5px] leading-relaxed text-slate-500">
+                Uma foto para cada lado, na ordem de quem anda em volta do veículo. Cada vaga
+                guarda uma foto — se tirar de novo, substitui só aquela.
+              </p>
+              {ANGULOS.map(([chave, rotulo, dica]) => (
+                <CampoFoto
+                  key={chave}
+                  rotulo={rotulo}
+                  dica={dica}
+                  obrigatoria
+                  arquivo={fotosAngulo[chave] ?? null}
+                  onArquivo={(f) => setFotosAngulo((p) => ({ ...p, [chave]: f }))}
                 />
-              </Campo>
+              ))}
             </div>
           </Cartao>
 
