@@ -33,8 +33,8 @@ import {
   cx,
 } from "@/components/ui";
 
-// A fila do gestor. Tudo vem pronto da view v_alertas — nada e recalculado
-// aqui. Cada alerta carrega o botao que resolve o problema.
+// A fila do gestor. Tudo vem pronto da view v_alertas_com_ciencia — nada e
+// recalculado aqui. Cada alerta carrega o botao que resolve o problema.
 //
 // A fila nao acumula: os alertas sao recalculados a cada abertura, e somem
 // sozinhos quando a causa deixa de existir. O que a ciencia acrescenta e o
@@ -94,7 +94,7 @@ export default function AlertasPage() {
     const supabase = createClient();
     await supabase.auth.getUser();
 
-    const nova = await supabase.from("v_alertas").select("*").order("ordem").order("placa");
+    const nova = await supabase.from("v_alertas_com_ciencia").select("*").order("ordem").order("placa");
     if (faltaMigracaoDaCiencia(nova.error)) {
       const velha = await supabase.from("v_alertas_ativos").select("*").order("ordem").order("placa");
       setTemCiencia(false);

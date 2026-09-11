@@ -773,6 +773,16 @@ ciência silencia o que se viu, nunca o próximo: sem isso, um clique distraído
 cegaria o veículo para sempre. **Provado num Postgres local**, incluindo a volta
 do alerta na vistoria seguinte.
 
+**A view chama-se `v_alertas_com_ciencia`, e o nome comprido tem motivo.** A
+primeira versão chamou-se `v_alertas` — nome que **já existia desde a 0002**,
+com outro significado (uma linha por veículo, situação da revisão). O Postgres
+recusou o arquivo inteiro com *"cannot change name of view column id to tipo"*,
+e a 0007 já tinha avisado em comentário que a `v_alertas` continuava intocada.
+O defeito passou pelo teste da migração isolada e só apareceu quando a cadeia
+inteira foi rodada do zero, na ordem — que virou o teste padrão daqui em diante.
+Na produção a tela não quebrou por acidente feliz: `order=ordem` numa view sem
+essa coluna devolve `42703`, que o `faltaMigracaoDaCiencia` já tratava.
+
 **RLS provada:** técnico barrado no insert (`insufficient_privilege`) e no delete
 (`DELETE 0`); PCM e gestor escrevem; todos leem, porque esconder a aba de "já
 vistos" do PCM só faria ele dar ciência de novo no que o gestor tratou.

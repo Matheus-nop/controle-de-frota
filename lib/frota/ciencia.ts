@@ -45,6 +45,13 @@ export type Alerta = {
 
 /** Se o erro é "a 0018 ainda não rodou".
  *
+ *  `42703` (coluna inexistente) está na lista por um motivo concreto: a primeira
+ *  versão desta migração chamou a view de `v_alertas` — nome que JÁ EXISTIA
+ *  desde a 0002, com outro significado. A migração foi recusada pelo banco, a
+ *  tela pediu `order=ordem` numa view que não tem essa coluna, e foi este código
+ *  que segurou a tela de pé até a correção. A view passou a se chamar
+ *  `v_alertas_com_ciencia`.
+ *
  *  As migrações deste projeto são aplicadas à mão no SQL Editor, e nem sempre no
  *  mesmo dia em que o código sobe. Entre um e outro a tela pede uma view que não
  *  existe — e quem pagaria por isso seria o gestor, com a fila de alertas vazia
@@ -57,7 +64,7 @@ export function faltaMigracaoDaCiencia(erro: { code?: string; message?: string }
     erro.code === "42P01" ||
     erro.code === "PGRST205" ||
     erro.code === "42703" ||
-    /v_alertas\b|referencia|alertas_ciencia/i.test(erro.message ?? "")
+    /v_alertas_com_ciencia|referencia|alertas_ciencia/i.test(erro.message ?? "")
   );
 }
 

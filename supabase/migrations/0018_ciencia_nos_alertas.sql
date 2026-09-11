@@ -47,6 +47,14 @@
 --   OCORRÊNCIA → o id da ocorrência.
 --   AVARIA     → o id da vistoria que achou o dano novo.
 
+-- ORDEM IMPORTA, E O ERRO É BARULHENTO
+--
+-- Depois desta migração, `v_alertas_ativos` tem uma coluna a mais
+-- (`referencia`). Reaplicar a 0014 ou a 0017 por engano recusa com "cannot drop
+-- columns from view" — o Postgres não deixa uma versão antiga da view apagar a
+-- coluna nova. Nada quebra: a view continua como está. Se precisar mesmo
+-- reaplicar uma delas, rode esta aqui logo em seguida.
+
 -- ---------------------------------------------------------------------
 -- A tabela
 -- ---------------------------------------------------------------------
@@ -93,11 +101,18 @@ create policy alertas_ciencia_delete on public.alertas_ciencia
 grant select, insert, delete on public.alertas_ciencia to authenticated;
 
 -- ---------------------------------------------------------------------
--- v_alertas — tudo, inclusive o que já tem ciência
+-- v_alertas_com_ciencia — tudo, inclusive o que já tem ciência
 -- ---------------------------------------------------------------------
 -- Os cinco alertas são os da 0007/0014/0017, agora com a coluna `referencia`.
 -- Estão aqui inteiros porque `create or replace view` exige a definição toda.
-create or replace view v_alertas as
+--
+-- O NOME COMPRIDO TEM MOTIVO. `v_alertas` JÁ EXISTE desde a 0002, e é outra
+-- coisa: uma linha por veículo com a situação da revisão. A primeira versão
+-- desta migração chamou-se `v_alertas` e o Postgres recusou o arquivo inteiro
+-- com "cannot change name of view column id to tipo" — que é o banco fazendo o
+-- favor de não deixar duas perguntas diferentes dividirem o mesmo nome.
+-- A 0007 até avisou, em comentário, que a `v_alertas` continuava intocada.
+create or replace view v_alertas_com_ciencia as
 with base as (
 
   -- 1. REVISAO — vencida (passou do km) ou proxima (faltam <= 2000 km)
@@ -249,8 +264,8 @@ left join public.alertas_ciencia c
   on c.tipo = b.tipo and c.veiculo_id = b.veiculo_id and c.referencia = b.referencia
 left join public.tecnicos t on t.id = c.por;
 
-alter view public.v_alertas set (security_invoker = on);
-grant select on public.v_alertas to authenticated;
+alter view public.v_alertas_com_ciencia set (security_invoker = on);
+grant select on public.v_alertas_com_ciencia to authenticated;
 
 -- ---------------------------------------------------------------------
 -- v_alertas_ativos — a fila, agora sem o que já foi visto
@@ -263,7 +278,7 @@ grant select on public.v_alertas to authenticated;
 create or replace view v_alertas_ativos as
 select
   tipo, gravidade, ordem, veiculo_id, placa, modelo, titulo, detalhe, desde, referencia
-from public.v_alertas
+from public.v_alertas_com_ciencia
 where ciencia_em is null;
 
 alter view public.v_alertas_ativos set (security_invoker = on);
