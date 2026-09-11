@@ -926,6 +926,47 @@ severo, que hoje é palpite.
 Postgres com o schema real, e os 9 marcos conferidos batem com `itensDoMarco` em
 TypeScript — 13 provas, incluindo cada um dos três padrões acima.
 
+### O plano da Strada, do manual (feito, 2026-09-11) — migração **0022**
+Páginas F-15, F-16 e F-17, revisões 01ª a 18ª. Oito regras, 23 serviços.
+
+**A tabela do manual é compartilhada por dois motores** — TURBO 200 e 1.3
+Firefly — e várias linhas dizem de qual se trata: o filtro de combustível do
+Firefly é a cada 20.000 km, o do TURBO 200 a cada 10.000; as velas do Firefly
+são a cada 40.000, as do TURBO 200 a cada 60.000. O gestor confirmou que a
+Strada da frota é **TURBO 200**, e só essas linhas foram cadastradas. Cadastrar a
+do motor errado seria mandar trocar peça fora de hora com o papel dando razão à
+oficina.
+
+Se um dia entrar uma Strada 1.3 Firefly, ela precisa de um **modelo próprio** em
+`veiculos` (como o "KIA BONGO 2026" da 0016), e não de uma linha a mais no
+escopo.
+
+**Não existe correia dentada neste plano, e não é esquecimento:** o TURBO 200 usa
+corrente de distribuição, que não tem troca programada. A correia que aparece é
+a dos órgãos auxiliares.
+
+**Uma suavização**, anotada na observação: a verificação do filtro de ar não
+aparece nas revisões de 30 em 30 mil porque nelas o elemento é trocado; aqui ela
+aparece junto, e se a ordem trouxer as duas linhas vale a troca.
+
+**Um ponto com margem de erro assumida:** os três itens de 120.000 km (válvula
+PRV, troca da correia dos auxiliares, óleo do câmbio) caem numa revisão só, no
+fim da tabela, onde a página encadernada arqueia e as colunas se comprimem. A
+leitura dá 12ª (120.000 km), que é o número plausível para "6 anos"; 13ª daria
+130.000, que não é intervalo de fabricante. Está dito na observação da regra para
+conferir contra o livro antes da primeira ordem que chegar nesse marco.
+
+**Método que fechou as leituras difíceis:** empilhar, acima da linha em dúvida,
+uma linha que tem marca em TODAS as 18 colunas (a do óleo do motor). Ela vira
+régua no mesmo arqueamento da página — régua linear erra, porque as colunas da
+direita são mais estreitas que as da esquerda. Foi assim que "06, 13, 18" virou
+"06, 12, 18" nas lonas de freio da F-16.
+
+**Provado nas duas linguagens:** a 0022 rodou duas vezes num Postgres com o
+schema real, e os 10 marcos conferidos batem com `itensDoMarco` em TypeScript —
+15 provas, incluindo que as velas saem a cada 60.000 e não a cada 40.000 (que
+seria o Firefly).
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
