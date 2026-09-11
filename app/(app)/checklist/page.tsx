@@ -135,6 +135,9 @@ function UltimoChecklist({ a }: { a: Anterior }) {
             {a.avarias.map((av, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2 text-[12.5px] text-slate-700">
                 <span className="font-semibold">{resumoDaAvaria(av)}</span>
+                {av.reclassificada_por && (
+                  <span className="text-[11px] text-slate-500">marcada pelo gestor</span>
+                )}
                 {av.descricao && <span className="text-slate-500">{av.descricao}</span>}
                 {av.fotos.map((u, k) => (
                   <a

@@ -1,13 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ClipboardCheck, Truck, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  ClipboardCheck,
+  ImageOff,
+  Truck,
+  Undo2,
+  type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { diaDe, intervaloUTC, periodoPadrao } from "@/lib/frota/tempo";
 import { emKm } from "@/lib/frota/numero";
-import { avariasDe, resumoDaAvaria, urls, type Avaria } from "@/lib/frota/avarias";
 import {
+  avariasDe,
+  desfazerReclassificacao,
+  reclassificarComoAvaria,
+  resumoDaAvaria,
+  urls,
+  type Avaria,
+} from "@/lib/frota/avarias";
+import {
+  Aviso,
   Badge,
+  Botao,
   Campo,
   Cartao,
   Carregando,
@@ -15,6 +31,7 @@ import {
   Input,
   Pagina,
   Placa,
+  Modal,
   Select,
   Vazio,
   cx,
@@ -27,7 +44,7 @@ import {
 
 type Veiculo = { id: string; placa: string; modelo: string };
 
-type Foto = { url: string; legenda: string };
+type Foto = { url: string; legenda: string; semanal?: boolean };
 
 type Registro = {
   id: string;
@@ -42,7 +59,16 @@ type Registro = {
   fotos: Foto[];
   /** As avarias da vistoria. Vazio nos outros tipos — é o que o filtro usa. */
   avarias: Avaria[];
+  /** Só no CHECKLIST: o id da linha e o `itens` cru, que a reclassificação
+   *  precisa para reescrever. Nos outros tipos fica nulo. */
+  checklistId: string | null;
+  itens: unknown;
 };
+
+// As mesmas opções do formulário do técnico. Se divergirem, o filtro por
+// onde/tipo passa a ter valores que nunca casam entre si.
+const AVARIA_ONDE = ["FRENTE", "TRASEIRA", "LATERAL DIREITA", "LATERAL ESQUERDA", "INTERIOR", "RODAS/PNEUS", "OUTRO"];
+const AVARIA_TIPO = ["AMASSADO", "ARRANHÃO", "QUEBRA", "LANTERNA/FAROL", "PNEU", "RETROVISOR", "OUTRO"];
 
 const TOM_TIPO: Record<string, Tom> = {
   CHECKLIST: "info",
@@ -69,6 +95,9 @@ function dataBR(s: string | null) {
 export default function HistoricoPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [registros, setRegistros] = useState<Registro[]>([]);
+  // Quem assina a reclassificação. Sai da mesma consulta que o resto do app usa
+  // para saber o papel — `tecnicos` pelo `user_id` do login.
+  const [quem, setQuem] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
 
   const [veiculoId, setVeiculoId] = useState("");
@@ -92,6 +121,16 @@ export default function HistoricoPage() {
       const { data } = await supabase.from("veiculos").select("id, placa, modelo").order("placa");
       const lista = (data as Veiculo[]) ?? [];
       setVeiculos(lista);
+
+      const { data: sessao } = await supabase.auth.getUser();
+      if (sessao?.user) {
+        const { data: eu } = await supabase
+          .from("tecnicos")
+          .select("nome")
+          .eq("user_id", sessao.user.id)
+          .maybeSingle();
+        setQuem((eu as { nome: string | null } | null)?.nome ?? sessao.user.email ?? null);
+      }
 
       const placa = new URLSearchParams(window.location.search).get("placa");
       if (placa) {
@@ -143,9 +182,19 @@ export default function HistoricoPage() {
       // aqui sem nenhuma foto de avaria.
       const avarias = avariasDe(itens);
       const fotos: Foto[] = [
-        ...urls(itens.fotos_semanais).map((u) => ({ url: u, legenda: "semanal" })),
+        ...urls(itens.fotos_semanais).map((u) => ({ url: u, legenda: "semanal", semanal: true })),
         ...avarias.flatMap((a, i) =>
-          a.fotos.map((u) => ({ url: u, legenda: avarias.length > 1 ? `avaria ${i + 1}` : "avaria" })),
+          a.fotos.map((u) => ({
+            url: u,
+            // A marca importa: numa discussão sobre quando o dano apareceu,
+            // "o técnico registrou na rua" e "o gestor reconheceu depois" não
+            // valem a mesma coisa.
+            legenda: a.reclassificada_por
+              ? "avaria (reclassificada)"
+              : avarias.length > 1
+                ? `avaria ${i + 1}`
+                : "avaria",
+          })),
         ),
         ...urls(itens.fotos_bloqueio).map((u) => ({ url: u, legenda: "bloqueio" })),
       ];
@@ -172,6 +221,8 @@ export default function HistoricoPage() {
         alerta: !c.apto,
         fotos,
         avarias,
+        checklistId: c.id,
+        itens,
       });
     }
 
@@ -199,6 +250,8 @@ export default function HistoricoPage() {
         alerta: r.situacao === "SEM FECHAMENTO" || !!r.houve_pendencia,
         fotos,
         avarias: [],
+        checklistId: null,
+        itens: null,
       });
     }
 
@@ -217,6 +270,8 @@ export default function HistoricoPage() {
         alerta: o.gravidade === "GRAVE",
         fotos: urls(o.fotos).map((u) => ({ url: u, legenda: "dano" })),
         avarias: [],
+        checklistId: null,
+        itens: null,
       });
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -357,7 +412,7 @@ export default function HistoricoPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {lista.map((r) => (
-            <CartaoRegistro key={r.id} r={r} />
+            <CartaoRegistro key={r.id} r={r} quem={quem} onMudou={carregar} />
           ))}
         </div>
       )}
@@ -365,7 +420,214 @@ export default function HistoricoPage() {
   );
 }
 
-function CartaoRegistro({ r }: { r: Registro }) {
+/**
+ * O gestor corrige a classificação de uma foto.
+ *
+ * O caso real: o técnico mandou onze fotos, todas marcadas como "semanal", e
+ * várias eram dano — farol quebrado, porta amassada. A vistoria ficou com zero
+ * avaria: o alerta não dispara, o comparativo da semana seguinte não tem com o
+ * que comparar, e o filtro de avaria não acha nada.
+ *
+ * Pedir para o técnico refazer não resolve: ele já entregou o veículo e foi
+ * para a rua. Quem consegue olhar a foto e dizer "isto é a traseira amassada" é
+ * o gestor, depois.
+ *
+ * A foto não muda e não se apaga nada — muda a classificação, e a mudança fica
+ * assinada. Só quem tem papel de gestor chega aqui, porque só ele passa pela
+ * policy de update de `checklists`.
+ */
+function ReclassificarFotos({
+  r,
+  quem,
+  onFechar,
+  onSalvo,
+}: {
+  r: Registro;
+  quem: string | null;
+  onFechar: () => void;
+  onSalvo: () => void;
+}) {
+  const semanais = r.fotos.filter((f) => f.semanal).map((f) => f.url);
+  const [escolhidas, setEscolhidas] = useState<string[]>([]);
+  const [onde, setOnde] = useState("");
+  const [tipo, setTipo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const reclassificadas = r.avarias
+    .map((a, i) => ({ a, i }))
+    .filter(({ a }) => a.reclassificada_por);
+
+  async function gravar(novoItens: Record<string, unknown>) {
+    if (!r.checklistId) return;
+    setSalvando(true);
+    setErro(null);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("checklists")
+      .update({ itens: novoItens })
+      .eq("id", r.checklistId);
+    setSalvando(false);
+    if (error) {
+      setErro(
+        error.code === "42501" || error.message.toLowerCase().includes("policy")
+          ? "Só o gestor pode reclassificar foto de vistoria."
+          : error.message,
+      );
+      return;
+    }
+    onSalvo();
+  }
+
+  return (
+    <Modal aberto titulo={`Reclassificar fotos · ${r.placa} · ${dataBR(r.data)}`} onFechar={onFechar}>
+      <div className="space-y-3.5">
+        <p className="text-[13px] leading-relaxed text-slate-600">
+          Escolha as fotos que são avaria e diga o que é. Elas saem das fotos semanais e passam a
+          contar como avaria desta vistoria — e ficam marcadas como reclassificadas por você.
+        </p>
+
+        {semanais.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-[13px] text-slate-500">
+            <ImageOff size={15} />
+            Nenhuma foto semanal sobrando nesta vistoria.
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {semanais.map((u) => {
+                const marcada = escolhidas.includes(u);
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() =>
+                      setEscolhidas((l) => (l.includes(u) ? l.filter((x) => x !== u) : [...l, u]))
+                    }
+                    className={cx(
+                      "relative block rounded-lg ring-2 transition",
+                      marcada ? "ring-amber-500" : "ring-transparent hover:ring-slate-300",
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={u}
+                      alt="foto da vistoria"
+                      loading="lazy"
+                      className={cx(
+                        "block h-[84px] w-[84px] rounded-lg object-cover",
+                        !marcada && "opacity-70",
+                      )}
+                    />
+                    {marcada && (
+                      <span className="absolute right-1 top-1 rounded bg-amber-500 px-1 text-[10px] font-bold text-white">
+                        avaria
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <Campo rotulo="Onde?">
+                <Select value={onde} onChange={(e) => setOnde(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {AVARIA_ONDE.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </Select>
+              </Campo>
+              <Campo rotulo="Tipo de avaria">
+                <Select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {AVARIA_TIPO.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </Select>
+              </Campo>
+            </div>
+            <Campo rotulo="Descrição (opcional)">
+              <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+            </Campo>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Botao
+                variante="primario"
+                disabled={salvando || escolhidas.length === 0 || (!onde && !tipo)}
+                onClick={() =>
+                  gravar(
+                    reclassificarComoAvaria(
+                      r.itens,
+                      escolhidas,
+                      { onde, tipo, descricao: descricao.trim() || null },
+                      quem,
+                    ),
+                  )
+                }
+              >
+                {salvando
+                  ? "Salvando…"
+                  : `Marcar ${escolhidas.length || ""} foto(s) como avaria`.replace("  ", " ")}
+              </Botao>
+              {escolhidas.length > 0 && !onde && !tipo && (
+                <span className="text-[12.5px] text-slate-500">Diga ao menos onde ou o tipo.</span>
+              )}
+            </div>
+          </>
+        )}
+
+        {reclassificadas.length > 0 && (
+          <div className="border-t border-slate-100 pt-3">
+            <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-slate-500">
+              Já reclassificadas por alguém
+            </div>
+            <div className="flex flex-col gap-2">
+              {reclassificadas.map(({ a, i }) => (
+                <div
+                  key={i}
+                  className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-2.5 ring-1 ring-inset ring-amber-200"
+                >
+                  <span className="text-[13px] font-semibold text-slate-800">{resumoDaAvaria(a)}</span>
+                  <span className="text-[11.5px] text-slate-500">
+                    {a.fotos.length} foto(s) · por {a.reclassificada_por}
+                  </span>
+                  <Botao
+                    tamanho="sm"
+                    className="ml-auto"
+                    disabled={salvando}
+                    onClick={() => gravar(desfazerReclassificacao(r.itens, i))}
+                  >
+                    <Undo2 size={13} />
+                    Desfazer
+                  </Botao>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {erro && <Aviso>{erro}</Aviso>}
+      </div>
+    </Modal>
+  );
+}
+
+function CartaoRegistro({
+  r,
+  quem,
+  onMudou,
+}: {
+  r: Registro;
+  quem: string | null;
+  onMudou: () => void;
+}) {
+  const [reclassificando, setReclassificando] = useState(false);
   const Icone = ICONE[r.tipo];
   return (
     <Cartao
@@ -391,6 +653,30 @@ function CartaoRegistro({ r }: { r: Registro }) {
         {r.tecnico}
         {r.detalhe ? " · " + r.detalhe : ""}
       </div>
+
+      {/* Reclassificar é ação de gestor. O botão aparece para todo mundo que
+          chega no histórico (gestor e PCM), e a RLS de `checklists` é quem
+          decide de verdade: o PCM recebe o aviso em vez de um erro cru. */}
+      {r.tipo === "CHECKLIST" && r.checklistId && (
+        <div className="mt-2.5">
+          <Botao tamanho="sm" onClick={() => setReclassificando(true)}>
+            <ImageOff size={13} />
+            Reclassificar fotos
+          </Botao>
+        </div>
+      )}
+
+      {reclassificando && (
+        <ReclassificarFotos
+          r={r}
+          quem={quem}
+          onFechar={() => setReclassificando(false)}
+          onSalvo={() => {
+            setReclassificando(false);
+            onMudou();
+          }}
+        />
+      )}
 
       {r.fotos.length > 0 ? (
         <div className="mt-2.5 flex flex-wrap gap-2">

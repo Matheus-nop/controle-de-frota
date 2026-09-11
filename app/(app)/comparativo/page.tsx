@@ -95,6 +95,11 @@ function Coluna({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[13px] font-semibold text-slate-800">{resumoDaAvaria(a)}</span>
                   {nova && <Badge tom="atencao">NOVA</Badge>}
+                  {/* Avaria que o gestor reconheceu depois, na mesa, não é
+                      avaria vista na rua. A tela não esconde a diferença. */}
+                  {a.reclassificada_por && (
+                    <Badge tom="mudo">reclassificada por {a.reclassificada_por}</Badge>
+                  )}
                   {a.ja_existia && (
                     <span className="text-[11px] text-slate-500">disse: {a.ja_existia}</span>
                   )}
