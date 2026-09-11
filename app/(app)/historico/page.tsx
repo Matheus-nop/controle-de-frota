@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowLeftRight,
   ClipboardCheck,
   ImageOff,
   ImagePlus,
@@ -15,6 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { legendaDoAngulo } from "@/lib/frota/angulos";
 import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
 import { fotoAnexada } from "@/lib/frota/anexo";
+import { correcoesDe, resumoDaCorrecao } from "@/lib/frota/correcao";
 import { mensagemDeErro } from "@/lib/frota/erro";
 import { diaDe, diaHoraDe, intervaloUTC, periodoPadrao } from "@/lib/frota/tempo";
 import { emKm } from "@/lib/frota/numero";
@@ -23,6 +25,7 @@ import {
   AnexarFotos,
   ExcluirVistoria,
   ReclassificarFotos,
+  TrocarVeiculo,
   type FotoDaVistoria,
   type Vistoria,
 } from "@/components/vistoria";
@@ -68,7 +71,13 @@ type Registro = {
    *  precisa para reescrever. Nos outros tipos fica nulo. */
   checklistId: string | null;
   veiculoId: string | null;
+  /** Só no CHECKLIST: o hodômetro registrado, que a troca de veículo confere. */
+  km: number | null;
   itens: unknown;
+  /** O que o gestor já corrigiu nesta vistoria. Fica à vista no cartão: uma
+   *  vistoria que mudou de veículo não é a mesma coisa que uma que sempre foi
+   *  daquele veículo, e quem lê o histórico depois precisa saber disso. */
+  correcoes: { campo: string; de: string | null; para: string | null; por: string | null; em: string | null }[];
   /** Só no CHECKLIST: a vistoria que o gestor tirou do ar. */
   anulada: { por: string | null; em: string; motivo: string | null } | null;
 };
@@ -263,6 +272,8 @@ export default function HistoricoPage() {
         fotos,
         avarias,
         checklistId: c.id,
+        km: c.km_atual ?? null,
+        correcoes: correcoesDe(itens),
         veiculoId: c.veiculo_id,
         itens,
         anulada: c.anulada_em
@@ -301,6 +312,8 @@ export default function HistoricoPage() {
         avarias: [],
         checklistId: null,
         veiculoId: null,
+        km: null,
+        correcoes: [],
         itens: null,
         anulada: null,
       });
@@ -323,6 +336,8 @@ export default function HistoricoPage() {
         avarias: [],
         checklistId: null,
         veiculoId: null,
+        km: null,
+        correcoes: [],
         itens: null,
         anulada: null,
       });
@@ -478,6 +493,7 @@ export default function HistoricoPage() {
             <CartaoRegistro
               key={r.id}
               r={r}
+              veiculos={veiculos}
               quem={quem}
               quemId={quemId}
               podeExcluir={!faltaMigracao}
@@ -495,12 +511,14 @@ export default function HistoricoPage() {
 
 function CartaoRegistro({
   r,
+  veiculos,
   quem,
   quemId,
   podeExcluir,
   onMudou,
 }: {
   r: Registro;
+  veiculos: Veiculo[];
   quem: string | null;
   quemId: string | null;
   podeExcluir: boolean;
@@ -508,6 +526,7 @@ function CartaoRegistro({
 }) {
   const [reclassificando, setReclassificando] = useState(false);
   const [anexando, setAnexando] = useState(false);
+  const [trocando, setTrocando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [restaurando, setRestaurando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -520,6 +539,8 @@ function CartaoRegistro({
         checklistId: r.checklistId,
         veiculoId: r.veiculoId,
         placa: r.placa,
+        modelo: r.modelo,
+        km: r.km,
         data: r.data,
         tecnico: r.tecnico,
         itens: r.itens,
@@ -593,6 +614,18 @@ function CartaoRegistro({
         </div>
       )}
 
+      {r.correcoes.length > 0 && (
+        <div className="mt-2.5 rounded-lg bg-amber-50 p-2.5 text-[12.5px] leading-relaxed text-amber-900 ring-1 ring-inset ring-amber-200">
+          {r.correcoes.map((c, i) => (
+            <div key={i}>
+              Corrigido: <strong>{resumoDaCorrecao(c)}</strong>
+              {c.por ? ` · por ${c.por}` : ""}
+              {c.em ? ` em ${diaHoraDe(c.em) ?? "—"}` : ""}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Reclassificar é ação de gestor. O botão aparece para todo mundo que
           chega no histórico (gestor e PCM), e a RLS de `checklists` é quem
           decide de verdade: o PCM recebe o aviso em vez de um erro cru. */}
@@ -612,6 +645,10 @@ function CartaoRegistro({
               <Botao tamanho="sm" onClick={() => setAnexando(true)}>
                 <ImagePlus size={13} />
                 Anexar fotos
+              </Botao>
+              <Botao tamanho="sm" onClick={() => setTrocando(true)}>
+                <ArrowLeftRight size={13} />
+                Trocar veículo
               </Botao>
               {podeExcluir && (
                 <Botao tamanho="sm" variante="perigo" onClick={() => setExcluindo(true)}>
@@ -649,6 +686,19 @@ function CartaoRegistro({
           onFechar={() => setAnexando(false)}
           onSalvo={() => {
             setAnexando(false);
+            onMudou();
+          }}
+        />
+      )}
+
+      {trocando && vistoria && (
+        <TrocarVeiculo
+          r={vistoria}
+          veiculos={veiculos}
+          quem={quem}
+          onFechar={() => setTrocando(false)}
+          onSalvo={() => {
+            setTrocando(false);
             onMudou();
           }}
         />

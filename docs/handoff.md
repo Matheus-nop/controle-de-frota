@@ -686,8 +686,8 @@ Só sai o que o gestor anexou. Foto que o técnico mandou não se apaga por aqui
 reclassificou depois" e "o gestor anexou depois" não valem a mesma coisa numa
 discussão sobre quando o dano apareceu, e as três telas mostram qual é qual.
 
-**`components/vistoria.tsx`** reúne as três correções (reclassificar, anexar,
-excluir). Saíram de `/historico`, que já passava de mil linhas.
+**`components/vistoria.tsx`** reúne as quatro correções (reclassificar, anexar,
+trocar veículo, excluir). Saíram de `/historico`, que já passava de mil linhas.
 
 **Dois cuidados que custaram teste para descobrir:**
 - **UPDATE barrado pela RLS não volta com erro.** As linhas simplesmente não
@@ -698,6 +698,42 @@ excluir). Saíram de `/historico`, que já passava de mil linhas.
   outro, toda consulta que pedisse `anulada_em` quebraria — inclusive a do
   técnico. `lib/frota/anulacao.ts` detecta a coluna ausente e refaz a consulta
   sem ela: o recurso novo não aparece, e nada mais quebra.
+
+### Trocar o veículo de uma vistoria (feito, 2026-09-11)
+"Fizeram um checklist da Saveiro como se fosse da Strada." A vistoria aconteceu
+inteira e aconteceu certo — as cinco fotos, o hodômetro, a volta em torno do
+veículo. Só o nome escolhido na lista está errado, e é erro de dois segundos.
+
+Excluir e mandar refazer joga fora trabalho bem feito, e ninguém refaz: o
+veículo já saiu e as fotos são de ontem. Deixar como está é pior — a Strada fica
+com km e avarias que não são dela, a Saveiro fica sem vistoria na semana, e o
+comparativo das duas deixa de significar coisa alguma.
+
+**`TrocarVeiculo`** (em `components/vistoria.tsx`) troca o `veiculo_id` e deixa o
+resto no lugar: fotos, avarias, técnico, data. **Sem migração** — a policy
+`checklists_update` já é `is_gestor()` desde a 0004.
+
+**A troca fica assinada em `itens.correcoes`** (`lib/frota/correcao.ts`), lista
+que só cresce: o que era, o que passou a ser, quem trocou e quando. O cartão do
+histórico mostra, para sempre. Sem esse rastro, "esta vistoria é da Saveiro" e
+"esta vistoria FOI TROCADA para a Saveiro por alguém na terça" seriam a mesma
+frase para quem lê seis meses depois — e não são, principalmente numa conversa
+sobre quem bateu o veículo.
+
+**O km entra na conversa** porque mover a vistoria muda a linha do hodômetro de
+dois veículos. O modal mostra as vistorias vizinhas do veículo de destino (a de
+antes e a de depois desta data) e avisa quando o km não se encaixa, ou quando o
+veículo de destino já tem vistoria no mesmo dia — o sinal provável de que a
+troca vai duplicar a vistoria certa. O km também é editável ali, porque até
+agora a única forma de corrigir km digitado errado era excluir e refazer.
+
+**São avisos, e não travas** (`avisosDaTroca`, testada fora do navegador com 11
+provas). Quem chega nessa tela está consertando dado torto à mão, com o veículo
+já na rua; uma trava viraria só um motivo para desistir e deixar errado.
+
+**As fotos não mudam de lugar no Storage** — continuam na pasta do veículo
+antigo. O endereço delas não muda e nada se perde; mover arquivo de balde para
+combinar com a correção seria trocar prova de lugar por estética.
 
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
