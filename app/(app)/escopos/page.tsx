@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { ListChecks, Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { itensDoMarco, regrasDoMarco, type Escopo } from "@/lib/frota/escopo";
+import {
+  inicioDe,
+  itensDoMarco,
+  marcosDaRegra,
+  regrasDoMarco,
+  type Escopo,
+} from "@/lib/frota/escopo";
 import { emKm, paraInteiro } from "@/lib/frota/numero";
 import {
   Aviso,
@@ -163,6 +169,7 @@ function BlocoModelo({
 }) {
   const [abrindo, setAbrindo] = useState(false);
   const [km, setKm] = useState("");
+  const [inicio, setInicio] = useState("");
   const [itens, setItens] = useState("");
   const [obs, setObs] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -192,6 +199,7 @@ function BlocoModelo({
     const { error } = await supabase.from("escopos_manutencao").insert({
       modelo,
       km_intervalo: kmNum,
+      km_inicio: paraInteiro(inicio) ?? 0,
       itens: lista,
       observacao: obs.trim() || null,
     });
@@ -205,6 +213,7 @@ function BlocoModelo({
       return;
     }
     setKm("");
+    setInicio("");
     setItens("");
     setObs("");
     setAbrindo(false);
@@ -253,6 +262,19 @@ function BlocoModelo({
               valor={km}
               onValor={setKm}
               dica="20.000 vale aos 20, 40, 60…"
+            />
+            {/* Quase sempre em branco. Existe porque o manual tem item que cai
+                nas revisões ímpares — filtro de ar aos 10, 30, 50 mil. */}
+            <CampoNumero
+              rotulo="Começando em (opcional)"
+              unidade="km"
+              valor={inicio}
+              onValor={setInicio}
+              dica={
+                paraInteiro(inicio)
+                  ? `vale aos ${marcosDaRegra({ km_intervalo: paraInteiro(km) ?? 0, km_inicio: paraInteiro(inicio) } as Escopo).map((m) => emKm(m)).join(", ")}…`
+                  : "em branco = desde o começo"
+              }
             />
             <Campo rotulo="Observação (opcional)" className="sm:col-span-2">
               <Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="ex.: usar óleo 5W30" />
@@ -370,9 +392,13 @@ function Regra({
         <span className="text-[14px] font-bold tabular-nums text-slate-900">
           a cada {emKm(r.km_intervalo)}
         </span>
+        {inicioDe(r) > 0 && <Badge tom="info">a partir de {emKm(inicioDe(r))}</Badge>}
         {!r.ativo && <Badge tom="mudo">DESLIGADA</Badge>}
+        {/* Os marcos de verdade, e não `intervalo × 1,2,3`: com começo diferente
+            de zero a conta muda, e um número que a pessoa não consegue conferir
+            é um número em que ela não confia. */}
         <span className="text-[12px] text-slate-500">
-          {r.itens.length} serviço(s) · vale aos {[1, 2, 3].map((n) => emKm(r.km_intervalo * n)).join(", ")}…
+          {r.itens.length} serviço(s) · vale aos {marcosDaRegra(r).map((m) => emKm(m)).join(", ")}…
         </span>
         <div className="ml-auto flex gap-2">
           <Botao tamanho="sm" onClick={() => setEditando((v) => !v)}>

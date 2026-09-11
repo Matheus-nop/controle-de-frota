@@ -853,6 +853,48 @@ errado quando não deu. Cada arquivo vira uma linha com ícone, nome e tamanho, 
 grava o resto, guarda a última nota na coluna antiga e diz em português o que
 ficou para depois.
 
+### O plano de manutenção da Fiorino, do manual (feito, 2026-09-11) — migração **0020**
+Lido das páginas F-12 a F-14 do manual ("Plano de Manutenção Programada —
+versões com motor FIRE 1.4 8V"), revisões 01ª a 18ª. Dez regras, 27 serviços.
+
+**`km_inicio` teve que existir.** A regra da 0015 é "o marco puxa a regra cujo
+intervalo o divide", e dois itens do manual não cabem nela:
+
+- **verificar o elemento do filtro de ar** cai nas revisões ÍMPARES — 10, 30, 50
+  mil (nas pares o elemento é trocado, não verificado);
+- **verificar visualmente a correia dentada** cai na 4ª, 10ª e 16ª — 40, 100 e
+  160 mil, sempre 20.000 km antes de cada troca da correia (60, 120, 180).
+
+Torcer os dois para caber num intervalo redondo seria pôr na ordem de serviço um
+km que o fabricante não mandou. A regra passou a ser `marco >= km_inicio e
+(marco - km_inicio) múltiplo de km_intervalo`; com `km_inicio = 0` é exatamente o
+que já era.
+
+**Duas suavizações, ambas anotadas na `observacao` da regra:**
+- a verificação das correias dos órgãos auxiliares, que no manual pula as
+  revisões em que a correia é trocada (60/120/180 mil), aqui aparece junto —
+  se a ordem trouxer as duas linhas, vale a troca;
+- o nível do óleo do câmbio, que o manual marca na 4ª, 8ª e 16ª, ficou a cada
+  40.000 km (inclui a 12ª) — conferir nível a mais não custa serviço.
+
+**Intervalo normal, e não o severo.** O manual manda metade do prazo nos itens
+com (*) para uso em estrada de terra ou entrega de porta em porta — que é o que
+a frota faz. Decisão do gestor em 2026-09-11: cadastrar o plano normal, com a
+regra do uso severo anotada na observação de cada regra que a tem, para decidir
+veículo a veículo na hora de abrir a ordem.
+
+**Como a leitura foi feita, para a próxima:** a foto do manual sai torta, e ler
+"+ na 12ª ou na 13ª" a olho erra. O caminho que funcionou foi endireitar a
+imagem (buscando o ângulo que maximiza a variância do perfil de linhas escuras)
+e depois empilhar a faixa do cabeçalho logo acima de cada linha da tabela — aí a
+coluna de cada marca fica indiscutível. Os scripts estão no diretório de
+rascunho da sessão.
+
+**Provado nas duas linguagens:** a 0020 rodou duas vezes num Postgres com o
+schema real, e os 13 marcos que ela imprime (10 itens aos 10.000, 19 aos 60.000,
+23 aos 120.000…) batem item a item com `itensDoMarco` em TypeScript — 19 provas.
+Se as duas divergirem, a tela mostra um escopo e o papel imprime outro.
+
 ### Ideias mapeadas, ainda não priorizadas
 - **Fotos históricas dos roteiros.** Não vieram na migração, por decisão de
   2026-08-03. Existem e são localizáveis (a `KM_DIARIO` guarda `LINHA_SAÍDA`
