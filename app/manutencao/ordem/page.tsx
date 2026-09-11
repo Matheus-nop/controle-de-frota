@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Fragment, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -76,11 +76,29 @@ function ParaPreencher({ rotulo, largo, linhas = 1 }: { rotulo: string; largo?: 
   );
 }
 
+// "ACIDENTE/AVARIA" é uma palavra só para o navegador: não tem espaço onde
+// quebrar a linha. Em tela estreita ela saía da coluna e passava por cima da
+// vizinha. O <wbr> diz que depois da barra (e do hífen) pode quebrar, para a
+// linha partir em "ACIDENTE/" em vez de no meio de "AVARIA".
+function comQuebra(valor: string) {
+  const pedacos = valor.split(/(?<=[/-])/);
+  return pedacos.map((pedaco, i) => (
+    <Fragment key={i}>
+      {pedaco}
+      {i < pedacos.length - 1 && <wbr />}
+    </Fragment>
+  ));
+}
+
 function Dado({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
     <div>
       <div className={ROTULO}>{rotulo}</div>
-      <div className="mt-0.5 text-sm font-semibold text-slate-900">{valor}</div>
+      {/* break-words é a rede: nome de oficina comprido quebra em vez de
+          invadir a coluna do lado. */}
+      <div className="mt-0.5 break-words text-sm font-semibold text-slate-900">
+        {comQuebra(valor)}
+      </div>
     </div>
   );
 }
@@ -193,7 +211,7 @@ function Ordem() {
         </header>
 
         <Bloco titulo="Veículo">
-          <div className="grid grid-cols-4 gap-x-[18px] gap-y-3">
+          <div className="grid grid-cols-2 gap-x-[18px] gap-y-3 sm:grid-cols-4 print:grid-cols-4">
             <Dado rotulo="Placa" valor={v?.placa ?? "—"} />
             <Dado rotulo="Modelo" valor={v?.modelo ?? "—"} />
             <Dado rotulo="Ano" valor={v?.ano ?? "—"} />
@@ -202,7 +220,7 @@ function Ordem() {
         </Bloco>
 
         <Bloco titulo="A ordem">
-          <div className="grid grid-cols-4 gap-x-[18px] gap-y-3">
+          <div className="grid grid-cols-2 gap-x-[18px] gap-y-3 sm:grid-cols-4 print:grid-cols-4">
             <Dado rotulo="Tipo" valor={m.tipo ?? "—"} />
             <Dado rotulo="Origem" valor={m.origem ?? "—"} />
             <Dado rotulo="Prioridade" valor={m.prioridade ?? "—"} />
@@ -244,7 +262,7 @@ function Ordem() {
             <ParaPreencher rotulo="Serviços realizados" largo linhas={4} />
             <ParaPreencher rotulo="Peças substituídas (descrição e quantidade)" largo linhas={4} />
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-x-[18px] gap-y-3">
+          <div className="mt-3 grid grid-cols-2 gap-x-[18px] gap-y-3 sm:grid-cols-4 print:grid-cols-4">
             <ParaPreencher rotulo="Entrada na oficina (data e hora)" />
             <ParaPreencher rotulo="Saída da oficina (data e hora)" />
             <ParaPreencher rotulo="Km na entrega" />
