@@ -72,21 +72,25 @@ type Manut = {
   nota_fiscal_url: string | null;
   notas_fiscais?: unknown;
   garantia?: string | null;
+  agendada_para?: string | null;
+  pacote_id?: string | null;
   veiculo: { placa: string; modelo: string } | { placa: string; modelo: string }[] | null;
 };
 
 const ORIGENS = ["CHECKLIST SEMANAL", "ROTEIRO", "ACIDENTE/AVARIA", "PREVENTIVA PROGRAMADA", "OUTRO"];
 const TIPOS = ["PREVENTIVA", "CORRETIVA"];
 const PRIORIDADES = ["BAIXA", "MÉDIA", "ALTA", "EMERGENCIAL"];
-const STATUS = ["ABERTA", "EM EXECUÇÃO", "CONCLUÍDA", "CANCELADA"];
+const STATUS = ["AGENDADA", "ABERTA", "EM EXECUÇÃO", "CONCLUÍDA", "CANCELADA"];
 
 const TOM_STATUS: Record<string, Tom> = {
+  AGENDADA: "info",
   ABERTA: "atencao",
   "EM EXECUÇÃO": "info",
   CONCLUÍDA: "ok",
   CANCELADA: "mudo",
 };
 const FAIXA_STATUS: Record<string, string> = {
+  AGENDADA: "border-l-sky-500",
   ABERTA: "border-l-amber-500",
   "EM EXECUÇÃO": "border-l-brand-600",
   CONCLUÍDA: "border-l-emerald-600",
@@ -101,6 +105,7 @@ function dataBR(s: string | null) {
 }
 
 const FILTROS: [string, string][] = [
+  ["AGENDADA", "Agendadas"],
   ["ABERTAS", "Em aberto"],
   ["CONCLUÍDA", "Concluídas"],
   ["CANCELADA", "Canceladas"],
@@ -161,13 +166,18 @@ export default function ManutencaoPage() {
           : m.status === filtro,
   );
   const abertas = manuts.filter((m) => m.status === "ABERTA" || m.status === "EM EXECUÇÃO").length;
+  const agendadas = manuts.filter((m) => m.status === "AGENDADA").length;
   const gastoTotal = manuts.reduce((s, m) => s + (m.valor_final || 0), 0);
 
   return (
     <Pagina
       estreita
       titulo="Manutenções"
-      subtitulo={carregando ? "carregando…" : `${abertas} em aberto · ${emReais(gastoTotal)} já pagos`}
+      subtitulo={
+        carregando
+          ? "carregando…"
+          : `${abertas} em aberto${agendadas ? ` · ${agendadas} agendada${agendadas === 1 ? "" : "s"}` : ""} · ${emReais(gastoTotal)} já pagos`
+      }
       acoes={
         <Botao variante="primario" onClick={() => setAddOpen((x) => !x)}>
           {addOpen ? (
@@ -252,6 +262,7 @@ function CartaoManutencao({
   );
   const [resp, setResp] = useState(m.responsavel_id || "");
   const [garantia, setGarantia] = useState(m.garantia ?? "");
+  const [agendadaPara, setAgendadaPara] = useState(m.agendada_para ?? "");
   // A oficina fatura peça e mão de obra em notas separadas, às vezes de CNPJs
   // diferentes. Por isso é lista, e por isso cada uma tem o seu rótulo — o nome
   // do arquivo costuma ser "scan_0012.pdf" e não ajuda ninguém depois.
@@ -317,6 +328,7 @@ function CartaoManutencao({
         proxima_revisao_km: paraInteiro(proxRev),
         responsavel_id: resp || null,
         garantia: garantia || null,
+        agendada_para: agendadaPara || null,
         concluida_em: concluindo ? (m.concluida_em ?? hojeBR()) : null,
       };
 
@@ -386,6 +398,7 @@ function CartaoManutencao({
         {m.origem ? " · " + m.origem : ""}
         {m.oficina ? " · " + m.oficina : ""}
         {ehGarantia(m.garantia) ? " · em garantia: " + m.garantia.toLowerCase() : ""}
+        {m.agendada_para ? " · agendada para " + dataBR(m.agendada_para) : ""}
         {m.concluida_em ? " · concluída " + dataBR(m.concluida_em) : ""}
       </div>
 
@@ -444,6 +457,15 @@ function CartaoManutencao({
             </Campo>
             <Campo rotulo="Oficina">
               <Input value={oficina} onChange={(e) => setOficina(e.target.value)} />
+            </Campo>
+            {/* Remarcar é o caso comum: a oficina liga na véspera e empurra.
+                Sem este campo, remarcar exigiria apagar e abrir de novo. */}
+            <Campo rotulo="Agendada para">
+              <Input
+                type="date"
+                value={agendadaPara}
+                onChange={(e) => setAgendadaPara(e.target.value)}
+              />
             </Campo>
             <Campo rotulo="Responsável">
               <Select value={resp} onChange={(e) => setResp(e.target.value)}>
