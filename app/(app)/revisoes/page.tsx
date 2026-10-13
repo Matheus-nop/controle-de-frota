@@ -48,6 +48,32 @@ import {
 
 type Veiculo = { id: string; placa: string; modelo: string; km_atual: number | null };
 
+/** Uma revisão do pacote: é uma manutenção comum, vista daqui. */
+export type Revisao = {
+  id: string;
+  pacote_id: string;
+  status: string;
+  agendada_para: string | null;
+  concluida_em: string | null;
+  km_abertura: number | null;
+  oficina: string | null;
+};
+
+const SITUACOES = ["AGENDADA", "CONCLUÍDA", "CANCELADA"] as const;
+
+const TOM_REVISAO: Record<string, Tom> = {
+  AGENDADA: "info",
+  ABERTA: "atencao",
+  "EM EXECUÇÃO": "atencao",
+  "CONCLUÍDA": "ok",
+  CANCELADA: "mudo",
+};
+
+/** A data que importa na revisão: quando aconteceu, ou quando está marcada. */
+function dataDaRevisao(r: Revisao): string | null {
+  return r.concluida_em ?? r.agendada_para;
+}
+
 const TOM_SITUACAO: Record<Situacao, Tom> = {
   "EM DIA": "ok",
   "REVISÃO VENCIDA": "atencao",
@@ -60,21 +86,30 @@ const TOM_SITUACAO: Record<Situacao, Tom> = {
 export default function RevisoesPage() {
   const [pacotes, setPacotes] = useState<Pacote[]>([]);
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
+  const [revisoes, setRevisoes] = useState<Revisao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [semMigracao, setSemMigracao] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
   const carregar = useCallback(async () => {
     const supabase = createClient();
-    const [p, v] = await Promise.all([
+    const [p, v, r] = await Promise.all([
       supabase.from("v_pacotes_revisao").select("*").order("vence_em", { nullsFirst: false }),
       supabase.from("veiculos").select("id, placa, modelo, km_atual").neq("status", "VENDIDO").order("placa"),
+      // As revisões de todos os pacotes de uma vez: são poucas (seis por
+      // pacote, num punhado de pacotes) e uma consulta por cartão seria
+      // desperdício numa frota de nove veículos.
+      supabase
+        .from("manutencoes")
+        .select("id, pacote_id, status, agendada_para, concluida_em, km_abertura, oficina")
+        .not("pacote_id", "is", null),
     ]);
     // A migração é aplicada à mão no SQL Editor; entre o deploy e ela, a tela
     // explica em português em vez de mostrar erro de banco.
     if (faltaMigracaoDosPacotes(p.error)) setSemMigracao(true);
     else setPacotes((p.data as Pacote[]) ?? []);
     setVeiculos((v.data as Veiculo[]) ?? []);
+    setRevisoes((r.data as Revisao[]) ?? []);
     setCarregando(false);
   }, []);
 
@@ -135,7 +170,12 @@ export default function RevisoesPage() {
           ) : (
             <div className="flex flex-col gap-3">
               {pacotes.map((p) => (
-                <CartaoPacote key={p.id} p={p} onMudou={carregar} />
+                <CartaoPacote
+                  key={p.id}
+                  p={p}
+                  revisoes={revisoes.filter((r) => r.pacote_id === p.id)}
+                  onMudou={carregar}
+                />
               ))}
             </div>
           )}
@@ -145,10 +185,24 @@ export default function RevisoesPage() {
   );
 }
 
-function CartaoPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
+function CartaoPacote({
+  p,
+  revisoes,
+  onMudou,
+}: {
+  p: Pacote;
+  revisoes: Revisao[];
+  onMudou: () => void;
+}) {
   const [agendar, setAgendar] = useState(false);
   const [editar, setEditar] = useState(false);
+  const [editandoRevisao, setEditandoRevisao] = useState<Revisao | null>(null);
   const situacao = situacaoDoPacote(p);
+  // As canceladas somem: não consomem revisão e não vão para o cronograma.
+  // A ordem é a do calendário, que é como o papel e a conversa acontecem.
+  const ativas = revisoes
+    .filter((r) => r.status !== "CANCELADA")
+    .sort((a, b) => (dataDaRevisao(a) ?? "").localeCompare(dataDaRevisao(b) ?? ""));
   const proxima = proximaDoPacote(p);
 
   return (
@@ -183,6 +237,32 @@ function CartaoPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
 
       {p.observacao && <div className="mt-2 text-[12.5px] text-slate-600">{p.observacao}</div>}
 
+      {/* Cada revisão, para corrigir uma a uma. Sem isto, lançar que a
+          primeira foi mesmo no dia 03 e não no dia marcado exigia caçar a
+          manutenção na outra tela — e lá não há campo para a data em que ela
+          de fato aconteceu. */}
+      {ativas.length > 0 && (
+        <div className="mt-3 divide-y divide-slate-100 rounded-lg ring-1 ring-inset ring-slate-200">
+          {ativas.map((r, i) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2">
+              <span className="w-[22px] text-[12.5px] font-semibold tabular-nums text-slate-500">
+                {i + 1}ª
+              </span>
+              <Badge tom={TOM_REVISAO[r.status] ?? "mudo"}>{r.status}</Badge>
+              <span className="text-[12.5px] tabular-nums text-slate-700">
+                {dataDaRevisao(r) ? dataBR(dataDaRevisao(r)!) : "sem data"}
+              </span>
+              {r.km_abertura != null && r.status === "CONCLUÍDA" && (
+                <span className="text-[12px] text-slate-500">{emKm(r.km_abertura)}</span>
+              )}
+              <Botao tamanho="sm" className="ml-auto" onClick={() => setEditandoRevisao(r)}>
+                Alterar
+              </Botao>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {p.restantes > 0 && !p.encerrado_em && (
           <Botao tamanho="sm" variante="primario" onClick={() => setAgendar(true)}>
@@ -204,6 +284,18 @@ function CartaoPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
         </BotaoLink>
         <EncerrarPacote p={p} onMudou={onMudou} />
       </div>
+
+      {editandoRevisao && (
+        <EditarRevisao
+          r={editandoRevisao}
+          p={p}
+          onFechar={() => setEditandoRevisao(null)}
+          onSalvo={() => {
+            setEditandoRevisao(null);
+            onMudou();
+          }}
+        />
+      )}
 
       {editar && (
         <EditarPacote
@@ -379,6 +471,123 @@ function EncerrarPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
         }}
       />
     </>
+  );
+}
+
+/** Corrige uma revisão: a situação, a data em que de fato aconteceu, o km.
+ *
+ *  A tela de Manutenção não serve para isto: lá, marcar CONCLUÍDA grava a data
+ *  de HOJE, sem campo para dizer que o serviço foi no dia 3. E achar a
+ *  manutenção certa no meio de todas exige saber o que procurar.
+ *
+ *  Cancelar é o jeito de apagar um engano — três agendamentos no mesmo dia,
+ *  por exemplo. A cancelada devolve a revisão ao saldo, some do cronograma e
+ *  continua no histórico, em vez de desaparecer sem rastro. */
+function EditarRevisao({
+  r,
+  p,
+  onFechar,
+  onSalvo,
+}: {
+  r: Revisao;
+  p: Pacote;
+  onFechar: () => void;
+  onSalvo: () => void;
+}) {
+  const [status, setStatus] = useState(r.status);
+  const [data, setData] = useState(dataDaRevisao(r) ?? hojeBR());
+  const [km, setKm] = useState(r.km_abertura != null ? String(r.km_abertura) : "");
+  const [oficina, setOficina] = useState(r.oficina ?? p.prestador);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const concluida = status === "CONCLUÍDA";
+  const cancelada = status === "CANCELADA";
+
+  async function salvar() {
+    setErro(null);
+    if (!cancelada && !data) {
+      setErro(concluida ? "Em que dia a revisão foi feita?" : "Para que dia ela está marcada?");
+      return;
+    }
+    setSalvando(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("manutencoes")
+        .update({
+          status,
+          // Concluída guarda a data em que aconteceu E preserva a prevista:
+          // é a comparação que o cronograma impresso mostra lado a lado.
+          concluida_em: concluida ? data : null,
+          agendada_para: concluida ? r.agendada_para : cancelada ? r.agendada_para : data,
+          km_abertura: paraInteiro(km),
+          oficina: oficina.trim() || null,
+        })
+        .eq("id", r.id);
+      if (error) throw error;
+      onSalvo();
+    } catch (err) {
+      setErro(mensagemDeErro(err, "a correção da revisão"));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal aberto titulo="Alterar revisão" onFechar={onFechar}>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <Campo rotulo="Situação">
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            {SITUACOES.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </Select>
+        </Campo>
+        {!cancelada && (
+          <Campo rotulo={concluida ? "Foi feita em" : "Marcada para"}>
+            <Input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+          </Campo>
+        )}
+        <CampoNumero
+          rotulo={concluida ? "Km na revisão" : "Km previsto"}
+          unidade="km"
+          valor={km}
+          onValor={setKm}
+        />
+        <Campo rotulo="Oficina">
+          <Input value={oficina} onChange={(e) => setOficina(e.target.value)} />
+        </Campo>
+      </div>
+
+      {cancelada && (
+        <p className="mt-3 text-[12.5px] leading-relaxed text-slate-600">
+          Cancelada, esta revisão <strong>volta para o saldo</strong> do pacote e some do
+          cronograma impresso. O registro continua no histórico — é assim que se desfaz um
+          agendamento repetido sem perder o rastro.
+        </p>
+      )}
+      {concluida && r.agendada_para && r.agendada_para !== data && (
+        <p className="mt-3 text-[12.5px] leading-relaxed text-slate-600">
+          Estava marcada para {dataBR(r.agendada_para)}. O cronograma vai mostrar as duas datas,
+          prevista e realizada.
+        </p>
+      )}
+
+      {erro && (
+        <div className="mt-2.5">
+          <Aviso>{erro}</Aviso>
+        </div>
+      )}
+      <div className="mt-3.5 flex items-center gap-2">
+        <Botao variante="primario" onClick={salvar} disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </Botao>
+        <Botao onClick={onFechar}>Cancelar</Botao>
+      </div>
+    </Modal>
   );
 }
 

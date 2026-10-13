@@ -97,9 +97,15 @@ oficina fala.
    costumam vir em papel, só que com os dados da frota.
 6. **O dia chegou.** O alerta avisa com 7 dias de antecedência. Leve a ordem
    de serviço impressa, que sai de **Manutenção**.
-7. **Voltou da oficina.** Em **Manutenção**, mude a situação para `CONCLUÍDA` e
-   lance o que foi feito. Se não foi, `CANCELADA` — e a revisão volta para o
-   saldo.
+7. **Voltou da oficina.** No cartão do pacote, *Alterar* na revisão: situação
+   `CONCLUÍDA` e **o dia em que ela de fato aconteceu** — que nem sempre é
+   hoje, porque a oficina devolve o veículo na sexta e o lançamento acontece
+   na segunda. A data prevista é preservada, e o cronograma mostra as duas
+   lado a lado.
+
+   Agendou repetido por engano? *Alterar* → `CANCELADA`. A revisão **volta
+   para o saldo**, some do cronograma e continua no histórico — é como se
+   desfaz um erro sem perder o rastro.
 
 ## Os alertas
 
