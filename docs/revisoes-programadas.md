@@ -73,22 +73,31 @@ oficina fala.
 1. **Comprou o serviço com pacote?** Cadastre em **Revisões** → *Novo pacote*:
    prestador, serviço, quantas gratuitas, a cadência que ele recomendou e até
    quando vale. O km da contratação em branco usa o hodômetro de agora.
-2. **O sistema avisa.** Quando a próxima vencer (por km ou por data), ou quando
+
+   Preencha **só a cadência que o prestador deu**: um pacote combinado "de 15
+   em 15 dias" não tem cadência por km, e inventar uma faz o cartão prever um
+   hodômetro que ninguém combinou. Deixar as duas em branco é recusado — sem
+   cadência não há próxima a prever, que é a razão de a tela existir.
+2. **Errou alguma coisa? *Editar*.** O veículo não muda (se for outro veículo,
+   é outro pacote), mas prestador, serviço, cadência, validade e quantidade se
+   corrigem no lugar. **Nunca apague o pacote para refazer**: as revisões já
+   usadas apontam para o id dele, e refazer do zero perde todas.
+3. **O sistema avisa.** Quando a próxima vencer (por km ou por data), ou quando
    o pacote estiver perto de expirar com saldo, aparece em **Alertas**.
-3. **Marcou com a oficina?** Em **Revisões**, *Agendar revisão*. Dá para
+4. **Marcou com a oficina?** Em **Revisões**, *Agendar revisão*. Dá para
    agendar **a série inteira de uma vez** — "as quatro restantes, de 15 em 15
    dias" —, que é como o prestador combina no balcão. As datas aparecem antes
    de gravar: descobrir depois que cinco caíram em domingo custa cinco
    remarcações. Cada uma vira uma manutenção `AGENDADA` apontando para o
    pacote, e o saldo cai na hora.
-4. **Imprima o cronograma.** Botão *Cronograma* no cartão. É o papel que vai ao
+5. **Imprima o cronograma.** Botão *Cronograma* no cartão. É o papel que vai ao
    balcão do prestador: lista as seis revisões com data prevista, data
    realizada, km e espaço para carimbo. Serve para combinar as datas e para a
    oficina carimbar o que fez — o "cartão de revisões" que esses pacotes
    costumam vir em papel, só que com os dados da frota.
-5. **O dia chegou.** O alerta avisa com 7 dias de antecedência. Leve a ordem
+6. **O dia chegou.** O alerta avisa com 7 dias de antecedência. Leve a ordem
    de serviço impressa, que sai de **Manutenção**.
-6. **Voltou da oficina.** Em **Manutenção**, mude a situação para `CONCLUÍDA` e
+7. **Voltou da oficina.** Em **Manutenção**, mude a situação para `CONCLUÍDA` e
    lance o que foi feito. Se não foi, `CANCELADA` — e a revisão volta para o
    saldo.
 

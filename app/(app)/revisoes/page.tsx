@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, Plus, Printer } from "lucide-react";
+import { CalendarClock, Pencil, Plus, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   datasDaSerie,
@@ -147,6 +147,7 @@ export default function RevisoesPage() {
 
 function CartaoPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
   const [agendar, setAgendar] = useState(false);
+  const [editar, setEditar] = useState(false);
   const situacao = situacaoDoPacote(p);
   const proxima = proximaDoPacote(p);
 
@@ -194,11 +195,26 @@ function CartaoPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
           <Printer size={13} />
           Cronograma
         </BotaoLink>
+        <Botao tamanho="sm" onClick={() => setEditar(true)}>
+          <Pencil size={13} />
+          Editar
+        </Botao>
         <BotaoLink href="/manutencao" tamanho="sm">
           Ver manutenções
         </BotaoLink>
         <EncerrarPacote p={p} onMudou={onMudou} />
       </div>
+
+      {editar && (
+        <EditarPacote
+          p={p}
+          onFechar={() => setEditar(false)}
+          onSalvo={() => {
+            setEditar(false);
+            onMudou();
+          }}
+        />
+      )}
 
       {agendar && (
         <AgendarRevisao
@@ -366,6 +382,194 @@ function EncerrarPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
   );
 }
 
+/** Os campos do pacote, compartilhados entre cadastrar e editar.
+ *
+ *  Existem como um bloco só porque a tela nasceu sem "editar", e corrigir uma
+ *  cadência errada obrigava a apagar o pacote e refazer — perdendo o histórico
+ *  das revisões já usadas. Dois formulários com os mesmos nove campos
+ *  divergiriam na primeira mudança, então o estado e a validação moram aqui. */
+function useCamposDoPacote(p?: Pacote) {
+  const [prestador, setPrestador] = useState(p?.prestador ?? "");
+  const [servico, setServico] = useState(p?.servico ?? "ALINHAMENTO E BALANCEAMENTO");
+  const [contratadoEm, setContratadoEm] = useState(p?.contratado_em ?? hojeBR());
+  const [kmContratado, setKmContratado] = useState(
+    p?.km_contratado != null ? String(p.km_contratado) : "",
+  );
+  const [gratuitas, setGratuitas] = useState(p ? String(p.revisoes_gratuitas) : "6");
+  const [cadaKm, setCadaKm] = useState(p?.cada_km != null ? String(p.cada_km) : "");
+  const [cadaDias, setCadaDias] = useState(p?.cada_dias != null ? String(p.cada_dias) : "");
+  const [venceEm, setVenceEm] = useState(p?.vence_em ?? "");
+  const [observacao, setObservacao] = useState(p?.observacao ?? "");
+
+  /** Nulo quando está tudo certo; a frase do problema quando não está. */
+  function validar(): string | null {
+    if (!prestador.trim() || !servico.trim()) return "Preencha o prestador e o serviço.";
+    const n = paraInteiro(gratuitas);
+    if (!n || n <= 0) return "Quantas revisões gratuitas o prestador deu?";
+    // Pacote sem cadência nenhuma não tem como prever a próxima — e prever a
+    // próxima é a razão de a tela existir.
+    if (paraInteiro(cadaKm) == null && paraInteiro(cadaDias) == null) {
+      return "Diga a cadência: de quantos em quantos km, de quantos em quantos dias, ou as duas.";
+    }
+    return null;
+  }
+
+  function paraGravar() {
+    return {
+      prestador: prestador.trim().toUpperCase(),
+      servico: servico.trim().toUpperCase(),
+      contratado_em: contratadoEm,
+      km_contratado: paraInteiro(kmContratado),
+      revisoes_gratuitas: paraInteiro(gratuitas) ?? 1,
+      cada_km: paraInteiro(cadaKm),
+      cada_dias: paraInteiro(cadaDias),
+      vence_em: venceEm || null,
+      observacao: observacao.trim() || null,
+    };
+  }
+
+  return {
+    prestador, setPrestador, servico, setServico,
+    contratadoEm, setContratadoEm, kmContratado, setKmContratado,
+    gratuitas, setGratuitas, cadaKm, setCadaKm, cadaDias, setCadaDias,
+    venceEm, setVenceEm, observacao, setObservacao,
+    validar, paraGravar,
+  };
+}
+
+type CamposPacote = ReturnType<typeof useCamposDoPacote>;
+
+function CamposDoPacote({ f, dicaKm }: { f: CamposPacote; dicaKm: number | null }) {
+  return (
+    <>
+      <Campo rotulo="Prestador *">
+        <Input
+          value={f.prestador}
+          onChange={(e) => f.setPrestador(e.target.value)}
+          placeholder="FULL PNEUS"
+        />
+      </Campo>
+      <Campo rotulo="Serviço *">
+        <Input value={f.servico} onChange={(e) => f.setServico(e.target.value)} />
+      </Campo>
+      <Campo rotulo="Contratado em">
+        <Input
+          type="date"
+          value={f.contratadoEm}
+          onChange={(e) => f.setContratadoEm(e.target.value)}
+        />
+      </Campo>
+      <CampoNumero
+        rotulo="Km na contratação"
+        unidade="km"
+        valor={f.kmContratado}
+        onValor={f.setKmContratado}
+        dica={dicaKm != null ? `em branco usa o hodômetro de agora, ${emKm(dicaKm)}` : undefined}
+      />
+      <Campo rotulo="Revisões gratuitas *">
+        <Input
+          inputMode="numeric"
+          value={f.gratuitas}
+          onChange={(e) => f.setGratuitas(e.target.value.replace(/\D/g, ""))}
+        />
+      </Campo>
+      {/* As duas cadências em branco de propósito: preencher uma que o
+          prestador não deu faz o cartão prever uma data que ninguém combinou —
+          foi o que aconteceu com os 10.000 km num pacote que era por dia. */}
+      <CampoNumero
+        rotulo="A cada (km)"
+        unidade="km"
+        valor={f.cadaKm}
+        onValor={f.setCadaKm}
+        dica="deixe em branco se o acordo não é por km"
+      />
+      <Campo rotulo="Ou a cada (dias)">
+        <Input
+          inputMode="numeric"
+          value={f.cadaDias}
+          onChange={(e) => f.setCadaDias(e.target.value.replace(/\D/g, ""))}
+        />
+      </Campo>
+      <Campo rotulo="Benefício vence em">
+        <Input type="date" value={f.venceEm} onChange={(e) => f.setVenceEm(e.target.value)} />
+      </Campo>
+      <div className="sm:col-span-2 lg:col-span-3">
+        <Campo rotulo="Observação">
+          <Textarea
+            rows={2}
+            value={f.observacao}
+            onChange={(e) => f.setObservacao(e.target.value)}
+            placeholder="nº da nota, condições combinadas, nome de quem vendeu…"
+          />
+        </Campo>
+      </div>
+    </>
+  );
+}
+
+/** Corrige o pacote sem apagá-lo. O histórico das revisões já usadas aponta
+ *  para este id — refazer o pacote do zero perderia todas elas. */
+function EditarPacote({
+  p,
+  onFechar,
+  onSalvo,
+}: {
+  p: Pacote;
+  onFechar: () => void;
+  onSalvo: () => void;
+}) {
+  const f = useCamposDoPacote(p);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function salvar() {
+    setErro(null);
+    const problema = f.validar();
+    if (problema) {
+      setErro(problema);
+      return;
+    }
+    setSalvando(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("pacotes_revisao")
+        .update(f.paraGravar())
+        .eq("id", p.id);
+      if (error) throw error;
+      onSalvo();
+    } catch (err) {
+      setErro(mensagemDeErro(err, "a correção do pacote"));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal aberto titulo="Editar pacote" onFechar={onFechar}>
+      <p className="mb-3 text-[13px] leading-relaxed text-slate-600">
+        O veículo não muda: se for outro veículo, é outro pacote. As{" "}
+        {p.usadas === 1 ? "revisão já usada continua" : `${p.usadas} revisões já usadas continuam`}{" "}
+        no histórico.
+      </p>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        <CamposDoPacote f={f} dicaKm={p.km_atual} />
+      </div>
+      {erro && (
+        <div className="mt-2.5">
+          <Aviso>{erro}</Aviso>
+        </div>
+      )}
+      <div className="mt-3.5 flex items-center gap-2">
+        <Botao variante="primario" onClick={salvar} disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </Botao>
+        <Botao onClick={onFechar}>Cancelar</Botao>
+      </div>
+    </Modal>
+  );
+}
+
 function NovoPacote({
   veiculos,
   onCriado,
@@ -374,15 +578,7 @@ function NovoPacote({
   onCriado: () => void;
 }) {
   const [veiculoId, setVeiculoId] = useState("");
-  const [prestador, setPrestador] = useState("");
-  const [servico, setServico] = useState("ALINHAMENTO E BALANCEAMENTO");
-  const [contratadoEm, setContratadoEm] = useState(hojeBR());
-  const [kmContratado, setKmContratado] = useState("");
-  const [gratuitas, setGratuitas] = useState("6");
-  const [cadaKm, setCadaKm] = useState("10000");
-  const [cadaDias, setCadaDias] = useState("60");
-  const [venceEm, setVenceEm] = useState("");
-  const [observacao, setObservacao] = useState("");
+  const f = useCamposDoPacote();
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -391,13 +587,13 @@ function NovoPacote({
   async function criar(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
-    if (!veiculoId || !prestador.trim() || !servico.trim()) {
-      setErro("Escolha o veículo e preencha o prestador e o serviço.");
+    if (!veiculoId) {
+      setErro("Escolha o veículo.");
       return;
     }
-    const n = paraInteiro(gratuitas);
-    if (!n || n <= 0) {
-      setErro("Quantas revisões gratuitas o prestador deu?");
+    const problema = f.validar();
+    if (problema) {
+      setErro(problema);
       return;
     }
     setSalvando(true);
@@ -405,17 +601,10 @@ function NovoPacote({
       const supabase = createClient();
       const { error } = await supabase.from("pacotes_revisao").insert({
         veiculo_id: veiculoId,
-        prestador: prestador.trim().toUpperCase(),
-        servico: servico.trim().toUpperCase(),
-        contratado_em: contratadoEm,
+        ...f.paraGravar(),
         // Sem km informado, usa o hodômetro de agora: é de onde a primeira
         // revisão vai contar, e sem ele a previsão por km não existiria.
-        km_contratado: paraInteiro(kmContratado) ?? escolhido?.km_atual ?? null,
-        revisoes_gratuitas: n,
-        cada_km: paraInteiro(cadaKm),
-        cada_dias: paraInteiro(cadaDias),
-        vence_em: venceEm || null,
-        observacao: observacao.trim() || null,
+        km_contratado: f.paraGravar().km_contratado ?? escolhido?.km_atual ?? null,
       });
       if (error) throw error;
       onCriado();
@@ -444,62 +633,7 @@ function NovoPacote({
               ))}
             </Select>
           </Campo>
-          <Campo rotulo="Prestador *">
-            <Input
-              value={prestador}
-              onChange={(e) => setPrestador(e.target.value)}
-              placeholder="FULL PNEUS"
-            />
-          </Campo>
-          <Campo rotulo="Serviço *">
-            <Input value={servico} onChange={(e) => setServico(e.target.value)} />
-          </Campo>
-          <Campo rotulo="Contratado em">
-            <Input
-              type="date"
-              value={contratadoEm}
-              onChange={(e) => setContratadoEm(e.target.value)}
-            />
-          </Campo>
-          <CampoNumero
-            rotulo="Km na contratação"
-            unidade="km"
-            valor={kmContratado}
-            onValor={setKmContratado}
-            dica={
-              escolhido?.km_atual != null
-                ? `em branco usa o hodômetro de agora, ${emKm(escolhido.km_atual)}`
-                : undefined
-            }
-          />
-          <Campo rotulo="Revisões gratuitas *">
-            <Input
-              inputMode="numeric"
-              value={gratuitas}
-              onChange={(e) => setGratuitas(e.target.value.replace(/\D/g, ""))}
-            />
-          </Campo>
-          <CampoNumero rotulo="A cada" unidade="km" valor={cadaKm} onValor={setCadaKm} />
-          <Campo rotulo="Ou a cada (dias)">
-            <Input
-              inputMode="numeric"
-              value={cadaDias}
-              onChange={(e) => setCadaDias(e.target.value.replace(/\D/g, ""))}
-            />
-          </Campo>
-          <Campo rotulo="Benefício vence em">
-            <Input type="date" value={venceEm} onChange={(e) => setVenceEm(e.target.value)} />
-          </Campo>
-        </div>
-        <div className="mt-2.5">
-          <Campo rotulo="Observação">
-            <Textarea
-              rows={2}
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-              placeholder="nº da nota, condições combinadas, nome de quem vendeu…"
-            />
-          </Campo>
+          <CamposDoPacote f={f} dicaKm={escolhido?.km_atual ?? null} />
         </div>
         {erro && (
           <div className="mt-2.5">
