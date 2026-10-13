@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, Plus } from "lucide-react";
+import { CalendarClock, Plus, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  datasDaSerie,
   faltaMigracaoDosPacotes,
   proximaDoPacote,
   saldoDoPacote,
@@ -188,6 +189,11 @@ function CartaoPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
             Agendar revisão
           </Botao>
         )}
+        {/* O papel que vai para o balcão do prestador e volta carimbado. */}
+        <BotaoLink href={`/revisoes/cronograma?id=${p.id}`} tamanho="sm">
+          <Printer size={13} />
+          Cronograma
+        </BotaoLink>
         <BotaoLink href="/manutencao" tamanho="sm">
           Ver manutenções
         </BotaoLink>
@@ -208,10 +214,14 @@ function CartaoPacote({ p, onMudou }: { p: Pacote; onMudou: () => void }) {
   );
 }
 
-/** Agenda a próxima revisão do pacote. Cria uma manutenção AGENDADA apontando
- *  para o pacote — a mesma manutenção de sempre, só que marcada para um dia
- *  que ainda não chegou. O saldo cai quando ela existe, e volta se for
- *  cancelada. */
+/** Agenda as próximas revisões do pacote.
+ *
+ *  Uma de cada vez não é como o prestador combina: "de quinze em quinze" sai
+ *  do balcão já com todas as datas. Agendar a série inteira de uma vez é o que
+ *  deixa o cronograma existir em papel e o alerta avisar de cada uma.
+ *
+ *  Cada revisão vira uma manutenção AGENDADA apontando para o pacote. O saldo
+ *  cai na hora, e volta sozinho se alguma for cancelada. */
 function AgendarRevisao({
   p,
   onFechar,
@@ -221,10 +231,18 @@ function AgendarRevisao({
   onFechar: () => void;
   onAgendado: () => void;
 }) {
-  const [data, setData] = useState(p.proxima_em && p.proxima_em > hojeBR() ? p.proxima_em : hojeBR());
+  const [data, setData] = useState(
+    p.proxima_em && p.proxima_em > hojeBR() ? p.proxima_em : hojeBR(),
+  );
   const [oficina, setOficina] = useState(p.prestador);
+  const [quantas, setQuantas] = useState("1");
+  const [cada, setCada] = useState(String(p.cada_dias ?? 15));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  const n = Math.min(Math.max(paraInteiro(quantas) ?? 1, 1), p.restantes);
+  const intervalo = paraInteiro(cada) ?? 0;
+  const datas = data && intervalo > 0 ? datasDaSerie(data, intervalo, n) : data ? [data] : [];
 
   async function agendar() {
     setErro(null);
@@ -232,20 +250,25 @@ function AgendarRevisao({
       setErro("Escolha o dia combinado com a oficina.");
       return;
     }
+    if (n > 1 && intervalo <= 0) {
+      setErro("Para agendar mais de uma, diga de quantos em quantos dias.");
+      return;
+    }
     setSalvando(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase.from("manutencoes").insert({
+      const linhas = datas.map((dia, i) => ({
         veiculo_id: p.veiculo_id,
-        descricao_problema: `${p.servico} — revisão ${p.usadas + 1} de ${p.revisoes_gratuitas} do pacote`,
+        descricao_problema: `${p.servico} — revisão ${p.usadas + i + 1} de ${p.revisoes_gratuitas} do pacote`,
         tipo: "PREVENTIVA",
         origem: "PREVENTIVA PROGRAMADA",
         oficina: oficina.trim() || p.prestador,
         pacote_id: p.id,
-        agendada_para: data,
+        agendada_para: dia,
         km_abertura: p.km_atual,
         status: "AGENDADA",
-      });
+      }));
+      const { error } = await supabase.from("manutencoes").insert(linhas);
       if (error) throw error;
       onAgendado();
     } catch (err) {
@@ -258,18 +281,42 @@ function AgendarRevisao({
   return (
     <Modal aberto titulo="Agendar revisão" onFechar={onFechar}>
       <p className="mb-3 text-[13px] leading-relaxed text-slate-600">
-        Marca a <strong>{p.usadas + 1}ª de {p.revisoes_gratuitas}</strong> revisões de{" "}
-        {p.servico.toLowerCase()} na {p.prestador}. Entra como manutenção agendada; o alerta avisa
-        quando o dia chegar, e some sozinho assim que o veículo for.
+        Marca a partir da <strong>{p.usadas + 1}ª de {p.revisoes_gratuitas}</strong> revisões de{" "}
+        {p.servico.toLowerCase()} na {p.prestador}. Cada uma entra como manutenção agendada; o
+        alerta avisa quando o dia chegar, e some sozinho assim que o veículo for.
       </p>
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-        <Campo rotulo="Dia combinado">
+        <Campo rotulo="Primeira, no dia">
           <Input type="date" value={data} onChange={(e) => setData(e.target.value)} />
         </Campo>
         <Campo rotulo="Oficina">
           <Input value={oficina} onChange={(e) => setOficina(e.target.value)} />
         </Campo>
+        <Campo rotulo={`Quantas agendar (sobram ${p.restantes})`}>
+          <Input
+            inputMode="numeric"
+            value={quantas}
+            onChange={(e) => setQuantas(e.target.value.replace(/\D/g, ""))}
+          />
+        </Campo>
+        <Campo rotulo="De quantos em quantos dias">
+          <Input
+            inputMode="numeric"
+            value={cada}
+            onChange={(e) => setCada(e.target.value.replace(/\D/g, ""))}
+          />
+        </Campo>
       </div>
+
+      {/* As datas aparecem ANTES de gravar: agendar cinco de uma vez e só
+          descobrir depois que caiu tudo em domingo custa cinco remarcações. */}
+      {datas.length > 1 && (
+        <div className="mt-3 rounded-lg bg-brand-50/70 px-3 py-2.5 text-[12.5px] text-brand-900 ring-1 ring-inset ring-brand-200">
+          <span className="font-semibold">Vai agendar {datas.length}:</span>{" "}
+          {datas.map((d) => dataBR(d)).join(" · ")}
+        </div>
+      )}
+
       {erro && (
         <div className="mt-2.5">
           <Aviso>{erro}</Aviso>
@@ -277,7 +324,7 @@ function AgendarRevisao({
       )}
       <div className="mt-3.5 flex items-center gap-2">
         <Botao variante="primario" onClick={agendar} disabled={salvando}>
-          {salvando ? "Agendando…" : "Agendar"}
+          {salvando ? "Agendando…" : datas.length > 1 ? `Agendar as ${datas.length}` : "Agendar"}
         </Botao>
         <Botao onClick={onFechar}>Cancelar</Botao>
       </div>
