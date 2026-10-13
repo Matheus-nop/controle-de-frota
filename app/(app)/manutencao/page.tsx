@@ -263,6 +263,7 @@ function CartaoManutencao({
   const [resp, setResp] = useState(m.responsavel_id || "");
   const [garantia, setGarantia] = useState(m.garantia ?? "");
   const [agendadaPara, setAgendadaPara] = useState(m.agendada_para ?? "");
+  const [concluidaEm, setConcluidaEm] = useState(m.concluida_em ?? "");
   // A oficina fatura peça e mão de obra em notas separadas, às vezes de CNPJs
   // diferentes. Por isso é lista, e por isso cada uma tem o seu rótulo — o nome
   // do arquivo costuma ser "scan_0012.pdf" e não ajuda ninguém depois.
@@ -329,7 +330,7 @@ function CartaoManutencao({
         responsavel_id: resp || null,
         garantia: garantia || null,
         agendada_para: agendadaPara || null,
-        concluida_em: concluindo ? (m.concluida_em ?? hojeBR()) : null,
+        concluida_em: concluindo ? (concluidaEm || m.concluida_em || hojeBR()) : null,
       };
 
       // Duas colunas podem não existir ainda, conforme o que já rodou no
@@ -467,6 +468,19 @@ function CartaoManutencao({
                 onChange={(e) => setAgendadaPara(e.target.value)}
               />
             </Campo>
+            {/* A data em que o serviço foi feito, que nem sempre é hoje: a
+                oficina devolve o veículo numa sexta e o lançamento acontece na
+                segunda. Sem este campo, concluir gravava sempre a data de
+                hoje, e o histórico ficava torto. */}
+            {status === "CONCLUÍDA" && (
+              <Campo rotulo="Concluída em">
+                <Input
+                  type="date"
+                  value={concluidaEm}
+                  onChange={(e) => setConcluidaEm(e.target.value)}
+                />
+              </Campo>
+            )}
             <Campo rotulo="Responsável">
               <Select value={resp} onChange={(e) => setResp(e.target.value)}>
                 <option value="">—</option>
