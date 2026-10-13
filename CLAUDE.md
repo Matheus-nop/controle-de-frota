@@ -51,5 +51,9 @@ mesmo dia. Mudou lá, muda aqui.
 - [~] Fase 8 — correção de vistoria pelo gestor (reclassificar, anexar foto,
       trocar veículo, excluir/anular), o envio de foto que aguenta 4G de rua,
       ciência nos alertas e várias notas fiscais por manutenção
+- [~] Fase 9 — garantia na manutenção, planos de manutenção dos cinco modelos
+      lidos dos manuais, e revisões programadas (agendamento e pacotes de
+      revisão gratuita do prestador)
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.
+Metodologia das revisões programadas: `docs/revisoes-programadas.md`.
