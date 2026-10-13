@@ -55,7 +55,16 @@ contador gravado teria duas fontes de verdade que divergem no primeiro
 cancelamento.
 
 A view também calcula a **próxima prevista**, contando a partir da última
-revisão usada (ou da contratação, se nenhuma foi usada ainda). Com as duas
+revisão usada (ou da contratação, se nenhuma foi usada ainda). "Última" aqui é
+`coalesce(concluida_em, agendada_para)`: vale quando aconteceu ou, não tendo
+acontecido, quando está marcada — então agendar o dia 18 empurra a próxima para
+o dia 18 mais a cadência. Até a 0028 isso estava errado: agendar consumia o
+saldo sem mover a previsão, e o cartão chegou a prever uma data **anterior** ao
+serviço já feito.
+
+O cartão separa `feitas` de `agendadas` — "1 feita · 1 agendada · sobram 4".
+"2 usadas" é verdade e é confuso: na conversa com o prestador, já ter feito uma
+e ter outra marcada é uma situação; já ter feito duas é outra. Com as duas
 cadências preenchidas — km e dias — vale o que chegar primeiro, que é como a
 oficina fala.
 
@@ -66,11 +75,20 @@ oficina fala.
    quando vale. O km da contratação em branco usa o hodômetro de agora.
 2. **O sistema avisa.** Quando a próxima vencer (por km ou por data), ou quando
    o pacote estiver perto de expirar com saldo, aparece em **Alertas**.
-3. **Marcou com a oficina?** Em **Revisões**, *Agendar revisão*. Cria uma
-   manutenção `AGENDADA` com o dia combinado, já apontando para o pacote. O
-   saldo cai na hora.
-4. **O dia chegou.** O alerta avisa. Leve a ordem de serviço impressa.
-5. **Voltou da oficina.** Em **Manutenção**, mude a situação para `CONCLUÍDA` e
+3. **Marcou com a oficina?** Em **Revisões**, *Agendar revisão*. Dá para
+   agendar **a série inteira de uma vez** — "as quatro restantes, de 15 em 15
+   dias" —, que é como o prestador combina no balcão. As datas aparecem antes
+   de gravar: descobrir depois que cinco caíram em domingo custa cinco
+   remarcações. Cada uma vira uma manutenção `AGENDADA` apontando para o
+   pacote, e o saldo cai na hora.
+4. **Imprima o cronograma.** Botão *Cronograma* no cartão. É o papel que vai ao
+   balcão do prestador: lista as seis revisões com data prevista, data
+   realizada, km e espaço para carimbo. Serve para combinar as datas e para a
+   oficina carimbar o que fez — o "cartão de revisões" que esses pacotes
+   costumam vir em papel, só que com os dados da frota.
+5. **O dia chegou.** O alerta avisa com 7 dias de antecedência. Leve a ordem
+   de serviço impressa, que sai de **Manutenção**.
+6. **Voltou da oficina.** Em **Manutenção**, mude a situação para `CONCLUÍDA` e
    lance o que foi feito. Se não foi, `CANCELADA` — e a revisão volta para o
    saldo.
 

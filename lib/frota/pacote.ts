@@ -35,6 +35,10 @@ export type Pacote = {
   proxima_em: string | null;
   proxima_km: number | null;
   dias_para_vencer: number | null;
+  /** Separadas desde a 0028: "2 usadas" é verdade e é confuso quando uma foi
+   *  feita e a outra só está marcada. */
+  feitas: number;
+  agendadas: number;
 };
 
 /** Os mesmos limiares do ramo de alerta da migração 0027. Mudou aqui, muda lá
@@ -78,11 +82,27 @@ export function entraNaFilaDeAlertas(p: Pacote): boolean {
   return vencendo || revisaoVencida(p);
 }
 
-/** "3 de 6 usadas · sobram 3" */
+/** "1 feita · 1 agendada · sobram 4".
+ *
+ *  Separa de propósito: na conversa com o prestador, "já fiz uma e tenho outra
+ *  marcada" é uma situação; "já fiz duas" é outra. */
 export function saldoDoPacote(p: Pacote): string {
-  return `${p.usadas} de ${p.revisoes_gratuitas} usadas · ${
-    p.restantes === 1 ? "sobra 1" : `sobram ${p.restantes}`
-  }`;
+  const partes: string[] = [];
+  if (p.feitas > 0) partes.push(`${p.feitas} feita${p.feitas === 1 ? "" : "s"}`);
+  if (p.agendadas > 0) partes.push(`${p.agendadas} agendada${p.agendadas === 1 ? "" : "s"}`);
+  if (partes.length === 0) partes.push(`nenhuma usada das ${p.revisoes_gratuitas}`);
+  partes.push(p.restantes === 1 ? "sobra 1" : `sobram ${p.restantes}`);
+  return partes.join(" · ");
+}
+
+/** As datas das próximas N revisões, a partir de uma data e de uma cadência em
+ *  dias. Serve para agendar a série inteira de uma vez — que é como o
+ *  prestador combina: "de quinze em quinze". */
+export function datasDaSerie(inicio: string, cadaDias: number, quantas: number): string[] {
+  const base = Date.parse(inicio + "T00:00:00Z");
+  return Array.from({ length: Math.max(0, quantas) }, (_, i) =>
+    new Date(base + i * cadaDias * 864e5).toISOString().slice(0, 10),
+  );
 }
 
 /** A linha que diz quando é a próxima, com o que o prestador deu de cadência.
