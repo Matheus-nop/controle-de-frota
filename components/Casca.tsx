@@ -21,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   ShieldAlert,
+  TrendingUp,
   Users,
   Wrench,
   X,
@@ -63,6 +64,7 @@ const MENU: ItemMenu[] = [
   { href: "/ponto", rotulo: "Ponto", icone: Clock, papeis: ["GESTOR", "PONTO"] },
   { href: "/veiculos", rotulo: "Veículos", icone: Car, papeis: ["GESTOR"], sep: true },
   { href: "/usuarios", rotulo: "Usuários", icone: Users, papeis: ["GESTOR"] },
+  { href: "/indicadores", rotulo: "Indicadores", icone: TrendingUp, papeis: ["GESTOR", "PCM"] },
   { href: "/relatorios", rotulo: "Relatórios", icone: BarChart3, papeis: ["GESTOR"] },
 ];
 
