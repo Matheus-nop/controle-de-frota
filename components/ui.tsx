@@ -998,3 +998,167 @@ export function CampoArquivos({
     </Campo>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Gráfico de barras
+// ---------------------------------------------------------------------------
+// Horizontal, e não em colunas, porque o rótulo é nome de técnico ou placa:
+// na vertical eles viram texto de lado, que ninguém lê de pé numa reunião.
+//
+// Uma cor só para todas as barras. Colorir cada barra por valor gastaria o
+// canal de identidade repetindo o que o comprimento já diz — e deixaria o
+// leitor procurando um significado nas cores que não existe.
+//
+// A cor é `acao-500`, token da marca. Ela e o `acento-600` do empilhado foram
+// conferidas contra o fundo em luminosidade, croma, separação para daltonismo
+// e contraste; o azul da marca (`brand-*`) reprovou no croma — é um azul
+// dessaturado demais para virar preenchimento de gráfico.
+//
+// A largura da barra é o único estilo em linha do kit, e é geometria, não
+// aparência: é o próprio dado. Não há como expressá-la em classe.
+
+export type BarraDado = {
+  chave: string;
+  /** O que a barra mede. */
+  valor: number;
+  /** O que escrever na ponta. Sem isto, o próprio valor. */
+  rotulo?: string;
+  /** A linha de baixo do balão: de onde o número saiu. */
+  detalhe?: string;
+};
+
+export function Barras({
+  dados,
+  max,
+  vazio = "Sem dados no período.",
+}: {
+  dados: BarraDado[];
+  /** O teto da escala. Sem isto, o maior valor da série. */
+  max?: number;
+  vazio?: string;
+}) {
+  if (dados.length === 0) return <p className="py-3 text-[13px] text-slate-500">{vazio}</p>;
+  const teto = Math.max(max ?? 0, ...dados.map((d) => d.valor), 1);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {dados.map((d) => {
+        const pct = Math.max((d.valor / teto) * 100, 0);
+        // Rótulo dentro da barra só quando cabe com folga; senão vai para fora,
+        // em vez de ser cortado.
+        const dentro = pct >= 28;
+        return (
+          <div key={d.chave} className="group grid grid-cols-[minmax(68px,22%)_1fr] items-center gap-2.5">
+            <div className="truncate text-[12.5px] text-slate-600" title={d.chave}>
+              {d.chave}
+            </div>
+            <div className="relative flex items-center gap-2">
+              {/* A trilha dá a referência do 100%: sem ela, 40% e 90% parecem
+                  a mesma coisa quando as duas barras são as únicas na tela. */}
+              <div className="h-[18px] flex-1 rounded-sm bg-slate-100">
+                <div
+                  className="flex h-full items-center justify-end rounded-r-[4px] bg-acao-500 transition-[width]"
+                  style={{ width: `${pct}%` }}
+                >
+                  {dentro && (
+                    <span className="px-2 text-[12px] font-semibold tabular-nums text-white">
+                      {d.rotulo ?? d.valor}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {!dentro && (
+                <span className="shrink-0 text-[12px] font-semibold tabular-nums text-slate-700">
+                  {d.rotulo ?? d.valor}
+                </span>
+              )}
+              {d.detalhe && (
+                <span className="pointer-events-none absolute -top-1 left-2 z-10 hidden -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11.5px] text-white shadow-lg group-hover:block">
+                  {d.detalhe}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export type BarraEmpilhada = {
+  chave: string;
+  partes: { valor: number; rotulo: string }[];
+  detalhe?: string;
+};
+
+/** Duas séries na mesma barra: o que já saiu e o que ainda está comprometido.
+ *  Com duas séries a legenda é obrigatória — ninguém deve depender de lembrar
+ *  qual cor era qual. */
+export function BarrasEmpilhadas({
+  dados,
+  series,
+  formatar,
+  vazio = "Sem dados no período.",
+}: {
+  dados: BarraEmpilhada[];
+  /** Os nomes das séries, na ordem das partes. Até duas. */
+  series: [string, string];
+  formatar: (n: number) => string;
+  vazio?: string;
+}) {
+  if (dados.length === 0) return <p className="py-3 text-[13px] text-slate-500">{vazio}</p>;
+  const teto = Math.max(...dados.map((d) => d.partes.reduce((s, p) => s + p.valor, 0)), 1);
+  const CORES = ["bg-acao-500", "bg-acento-600"];
+
+  return (
+    <div>
+      <div className="mb-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+        {series.map((s, i) => (
+          <span key={s} className="flex items-center gap-1.5 text-[12px] text-slate-600">
+            <span className={cx("h-2.5 w-2.5 rounded-sm", CORES[i])} />
+            {s}
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2">
+        {dados.map((d) => {
+          const total = d.partes.reduce((s, p) => s + p.valor, 0);
+          return (
+            <div key={d.chave} className="group grid grid-cols-[minmax(68px,22%)_1fr] items-center gap-2.5">
+              <div className="truncate text-[12.5px] text-slate-600" title={d.chave}>
+                {d.chave}
+              </div>
+              <div className="relative flex items-center gap-2">
+                {/* gap-[2px]: é o fundo separando as fatias. Borda em volta de
+                    cada uma acrescentaria tinta que não é dado. */}
+                <div className="flex h-[18px] flex-1 gap-[2px] rounded-sm bg-slate-100">
+                  {d.partes.map((p, i) =>
+                    p.valor > 0 ? (
+                      <div
+                        key={p.rotulo}
+                        className={cx(
+                          "h-full first:rounded-l-sm",
+                          CORES[i],
+                          i === d.partes.length - 1 && "rounded-r-[4px]",
+                        )}
+                        style={{ width: `${(p.valor / teto) * 100}%` }}
+                      />
+                    ) : null,
+                  )}
+                </div>
+                <span className="shrink-0 text-[12px] font-semibold tabular-nums text-slate-700">
+                  {formatar(total)}
+                </span>
+                {d.detalhe && (
+                  <span className="pointer-events-none absolute -top-1 left-2 z-10 hidden -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11.5px] text-white shadow-lg group-hover:block">
+                    {d.detalhe}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

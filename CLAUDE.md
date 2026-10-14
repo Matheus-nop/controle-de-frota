@@ -36,7 +36,13 @@ mesmo dia. Mudou lá, muda aqui.
 - **PCM**: planejamento e controle de manutenção — abre e fecha ordem de serviço.
 - **ponto**: o time da folha, que confere horário de saída e chegada em `/ponto`.
 - **ordem de serviço**: o papel que vai com o veículo para a oficina.
-- **checklist**: vistoria semanal do veículo.
+- **checklist**: vistoria semanal do veículo, feita pelo técnico — fala de
+  segurança: pneu, freio, luz.
+- **limpeza**: conferência semanal de limpeza, feita pela expedição — fala de
+  apresentação. Tabela própria, e não um bloco do checklist: são dois times em
+  dois momentos, e a adesão de uma não pode depender da outra.
+- **adesão**: do que devia ter sido registrado, quanto foi. Toda taxa mostra o
+  denominador.
 - Não use "viagem", "corrida", "motorista", "driver", "trip". A equipe não fala assim.
 
 ## Estado
@@ -54,6 +60,8 @@ mesmo dia. Mudou lá, muda aqui.
 - [~] Fase 9 — garantia na manutenção, planos de manutenção dos cinco modelos
       lidos dos manuais, e revisões programadas (agendamento e pacotes de
       revisão gratuita do prestador)
+- [~] Fase 10 — indicadores com gráficos para reunião (adesão a roteiro e
+      vistoria, avarias, gastos) e checklist de limpeza semanal pela expedição
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.
 Metodologia das revisões programadas: `docs/revisoes-programadas.md`.

@@ -21,6 +21,8 @@ import {
   Plus,
   RefreshCw,
   ShieldAlert,
+  Sparkles,
+  TrendingUp,
   Users,
   Wrench,
   X,
@@ -58,11 +60,13 @@ const MENU: ItemMenu[] = [
   { href: "/revisoes", rotulo: "Revisões", icone: CalendarClock, papeis: ["GESTOR", "PCM"] },
   { href: "/ocorrencias", rotulo: "Ocorrências", icone: ShieldAlert, papeis: ["GESTOR"] },
   { href: "/checklist", rotulo: "Checklist", icone: ClipboardCheck, papeis: ["TECNICO", "PCM"] },
+  { href: "/limpeza", rotulo: "Limpeza", icone: Sparkles, papeis: ["GESTOR", "PCM"] },
   { href: "/historico", rotulo: "Histórico", icone: History, papeis: ["GESTOR", "PCM"] },
   { href: "/comparativo", rotulo: "Comparar", icone: GitCompareArrows, papeis: ["GESTOR", "PCM"] },
   { href: "/ponto", rotulo: "Ponto", icone: Clock, papeis: ["GESTOR", "PONTO"] },
   { href: "/veiculos", rotulo: "Veículos", icone: Car, papeis: ["GESTOR"], sep: true },
   { href: "/usuarios", rotulo: "Usuários", icone: Users, papeis: ["GESTOR"] },
+  { href: "/indicadores", rotulo: "Indicadores", icone: TrendingUp, papeis: ["GESTOR", "PCM"] },
   { href: "/relatorios", rotulo: "Relatórios", icone: BarChart3, papeis: ["GESTOR"] },
 ];
 
