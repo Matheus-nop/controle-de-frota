@@ -58,11 +58,12 @@ export default function IndicadoresPage() {
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
   const [vistorias, setVistorias] = useState<VistoriaComItens[]>([]);
   const [manuts, setManuts] = useState<Manut[]>([]);
+  const [limpezas, setLimpezas] = useState<{ veiculo_id: string; data: string }[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const carregar = useCallback(async () => {
     const supabase = createClient();
-    const [v, r, c, m] = await Promise.all([
+    const [v, r, c, m, lz] = await Promise.all([
       supabase.from("veiculos").select("id, placa, modelo, status").neq("status", "VENDIDO").order("placa"),
       supabase
         .from("v_roteiros")
@@ -79,11 +80,13 @@ export default function IndicadoresPage() {
         .from("manutencoes")
         .select("veiculo_id, status, valor_final, orcamento")
         .gte("aberta_em", de).lte("aberta_em", ate),
+      supabase.from("limpezas").select("veiculo_id, data").gte("data", de).lte("data", ate),
     ]);
     setVeiculos((v.data as Veiculo[]) ?? []);
     setRoteiros((r.data as Roteiro[]) ?? []);
     setVistorias((c.data as VistoriaComItens[]) ?? []);
     setManuts((m.data as Manut[]) ?? []);
+    setLimpezas((lz.data as { veiculo_id: string; data: string }[]) ?? []);
     setCarregando(false);
   }, [de, ate]);
 
@@ -102,6 +105,10 @@ export default function IndicadoresPage() {
     [vistorias, ativos, semanas],
   );
   const avarias = useMemo(() => avariasPorVeiculo(vistorias, ativos), [vistorias, ativos]);
+  const limpezaPorVeiculo = useMemo(
+    () => adesaoDeVistoria(limpezas, ativos, semanas),
+    [limpezas, ativos, semanas],
+  );
 
   const gastos = useMemo(() => {
     const mapa = new Map<string, { gasto: number; previsto: number }>();
@@ -121,6 +128,7 @@ export default function IndicadoresPage() {
 
   const geralRoteiro = taxaGeral(porTecnico);
   const geralVistoria = taxaGeral(porVeiculo);
+  const geralLimpeza = taxaGeral(limpezaPorVeiculo);
   const totalGasto = gastos.reduce((s, g) => s + g.gasto, 0);
   const totalAvarias = avarias.reduce((s, a) => s + a.avarias, 0);
   const periodo = `${dataBR(de)} a ${dataBR(ate)}`;
@@ -153,7 +161,7 @@ export default function IndicadoresPage() {
         </Cartao>
       ) : (
         <>
-          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Contador
               rotulo="Adesão ao roteiro"
               valor={geralRoteiro.pct != null ? `${geralRoteiro.pct}%` : "—"}
@@ -165,6 +173,16 @@ export default function IndicadoresPage() {
               valor={geralVistoria.pct != null ? `${geralVistoria.pct}%` : "—"}
               legenda={`${geralVistoria.feito} de ${geralVistoria.esperado} semanas-veículo · meta ${META}%`}
               tom={corDaMeta(geralVistoria.pct)}
+            />
+            <Contador
+              rotulo="Adesão à limpeza"
+              valor={limpezas.length === 0 ? "—" : geralLimpeza.pct != null ? `${geralLimpeza.pct}%` : "—"}
+              legenda={
+                limpezas.length === 0
+                  ? "nenhuma limpeza registrada"
+                  : `${geralLimpeza.feito} de ${geralLimpeza.esperado} semanas-veículo · meta ${META}%`
+              }
+              tom={limpezas.length === 0 ? "text-slate-400" : corDaMeta(geralLimpeza.pct)}
             />
             <Contador
               rotulo="Avarias em aberto"
@@ -206,6 +224,23 @@ export default function IndicadoresPage() {
                 vazio="Nenhuma vistoria no período."
               />
             </Painel>
+
+            {limpezas.length > 0 && (
+              <Painel
+                titulo="Adesão à limpeza semanal"
+                explica={`De ${semanas} semana${semanas === 1 ? "" : "s"} no período, em quantas a expedição conferiu a limpeza de cada veículo.`}
+              >
+                <Barras
+                  dados={limpezaPorVeiculo.map((t) => ({
+                    chave: t.chave,
+                    valor: t.pct ?? 0,
+                    rotulo: t.pct != null ? `${t.pct}%` : "—",
+                    detalhe: `${t.feito} de ${t.esperado} semanas`,
+                  }))}
+                  max={100}
+                />
+              </Painel>
+            )}
 
             <Painel
               titulo="Veículos com mais avaria"
