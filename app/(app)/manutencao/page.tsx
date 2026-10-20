@@ -15,7 +15,13 @@ import {
   resumoDaNota,
   ROTULOS_NOTA,
 } from "@/lib/frota/notas";
-import { semLavagemNoMes, TIPO_LAVAGEM, mesDe } from "@/lib/frota/limpeza";
+import {
+  mesDe,
+  papelDaManutencao,
+  rotuloDoPapel,
+  semLavagemNoMes,
+  TIPO_LAVAGEM,
+} from "@/lib/frota/limpeza";
 import {
   ehGarantia,
   faltaMigracaoDaGarantia,
@@ -246,6 +252,18 @@ export default function ManutencaoPage() {
           </button>
         ))}
       </div>
+
+      {filtro === "LAVAGEM" && (
+        <Cartao className="mb-3 flex flex-wrap items-center gap-2.5 p-3.5">
+          <span className="text-[12.5px] text-slate-600">
+            O papel do mês: quantos foram lavados, quanto custou e quem ficou de fora.
+          </span>
+          <BotaoLink href="/manutencao/lavagens" tamanho="sm" className="ml-auto">
+            <Printer size={13} />
+            Papel do mês
+          </BotaoLink>
+        </Cartao>
+      )}
 
       {carregando ? (
         <Cartao>
@@ -614,10 +632,11 @@ function CartaoManutencao({
         <Botao tamanho="sm" onClick={() => setAberto((x) => !x)}>
           {aberto ? "Fechar" : "Registrar andamento"}
         </Botao>
-        {/* o papel que vai com o veículo para a oficina */}
-        <BotaoLink href={`/manutencao/ordem?id=${m.id}`} tamanho="sm">
+        {/* o papel que vai com o veículo: a ordem de serviço na oficina, o
+            formulário de lavagem no lava-jato */}
+        <BotaoLink href={papelDaManutencao(m.tipo, m.id)} tamanho="sm">
           <Printer size={13} />
-          Ordem de serviço
+          {rotuloDoPapel(m.tipo)}
         </BotaoLink>
       </div>
 
@@ -875,12 +894,13 @@ function NovaManutencao({
           <div className="mb-3.5 rounded-lg bg-emerald-50 p-3.5 ring-1 ring-inset ring-emerald-200">
             <div className="text-[13.5px] font-semibold text-emerald-800">Manutenção aberta.</div>
             <p className="mb-2.5 mt-1 text-[12.5px] leading-relaxed text-emerald-800">
-              Imprima a ordem de serviço e mande junto com o veículo — é o que orienta a oficina e
-              volta preenchido para você lançar aqui.
+              Imprima {tipo === TIPO_LAVAGEM ? "o formulário" : "a ordem de serviço"} e mande junto com o
+              veículo — é o que orienta {tipo === TIPO_LAVAGEM ? "o lava-jato" : "a oficina"} e volta
+              preenchido para você lançar aqui.
             </p>
-            <BotaoLink href={`/manutencao/ordem?id=${criadaId}`} tamanho="sm">
+            <BotaoLink href={papelDaManutencao(tipo, criadaId)} tamanho="sm">
               <Printer size={13} />
-              Imprimir ordem de serviço
+              Imprimir {rotuloDoPapel(tipo).toLowerCase()}
             </BotaoLink>
           </div>
         )}

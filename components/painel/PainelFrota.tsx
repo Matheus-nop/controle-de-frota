@@ -33,6 +33,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { papelDaManutencao, rotuloDoPapel } from "@/lib/frota/limpeza";
 import {
   Badge,
   Botao,
@@ -887,9 +888,9 @@ function FichaManut({ man, onFechar }: { man: ManutencaoDados | null; onFechar()
                 Abrir nota fiscal
               </BotaoLink>
             )}
-            <BotaoLink href={"/manutencao/ordem?id=" + man.id}>
+            <BotaoLink href={papelDaManutencao(man.tipo, String(man.id))}>
               <Printer size={14} />
-              Ordem para imprimir
+              {rotuloDoPapel(man.tipo)} para imprimir
             </BotaoLink>
             <BotaoLink href="/manutencao" variante="primario">
               <Wrench size={14} />

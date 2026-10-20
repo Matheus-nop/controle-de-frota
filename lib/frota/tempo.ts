@@ -74,6 +74,23 @@ export function dataBR(s: string | null | undefined): string {
   return s && SO_DIA.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : "—";
 }
 
+const MESES = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+/**
+ * "2026-10" ou "2026-10-18" -> "outubro de 2026".
+ *
+ * O mês escrito, e não "10/2026": é o que vai no papel que alguém lê em voz
+ * alta numa reunião. Aceita a data inteira porque quem chama quase sempre tem
+ * uma data na mão, não um mês.
+ */
+export function nomeDoMes(s: string): string {
+  const m = MESES[Number(s.slice(5, 7)) - 1];
+  return m ? `${m} de ${s.slice(0, 4)}` : "—";
+}
+
 /** O dia de hoje em São Paulo, "2026-07-24". */
 export function hojeBR(): string {
   return diaISO(new Date());
