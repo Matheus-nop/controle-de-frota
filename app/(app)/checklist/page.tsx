@@ -8,7 +8,13 @@ import { emKm, paraInteiro } from "@/lib/frota/numero";
 import { dataBR, hojeBR } from "@/lib/frota/tempo";
 import { enviarFoto, enviarFotos } from "@/lib/frota/foto";
 import { mensagemDeErro } from "@/lib/frota/erro";
-import { ANGULOS } from "@/lib/frota/angulos";
+import {
+  ANGULO_MOTOR,
+  ANGULOS,
+  fotosFaltando,
+  fotosPedidas,
+  precisaFotoDoMotor,
+} from "@/lib/frota/angulos";
 import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
 import {
   Aviso,
@@ -191,6 +197,9 @@ export default function ChecklistPage() {
   // Saveiro descobriu do pior jeito que escolher uma foto de cada vez
   // SUBSTITUÍA a anterior: cinco cliques, uma foto no banco.
   const [fotosAngulo, setFotosAngulo] = useState<Record<string, File | null>>({});
+  // A foto do motor é mensal. `null` enquanto a consulta do mês não voltou:
+  // mostrar o campo e tirá-lo da tela depois seria pior do que esperar.
+  const [precisaMotor, setPrecisaMotor] = useState<boolean | null>(null);
 
   const [salvando, setSalvando] = useState(false);
   // Quantas fotos já subiram. Envio de cinco fotos num 4G fraco demora, e botão
@@ -227,7 +236,10 @@ export default function ChecklistPage() {
       // A limpeza também vai para dentro do callback: mexer no estado direto no
       // corpo do efeito dispara render em cascata, e o lint do projeto barra.
       if (!veiculoId) {
-        if (valeu) setAnterior(null);
+        if (valeu) {
+          setAnterior(null);
+          setPrecisaMotor(null);
+        }
         return;
       }
       const supabase = createClient();
@@ -264,6 +276,26 @@ export default function ChecklistPage() {
         avarias: avariasDe(c.itens),
       });
     })();
+
+    // A foto do motor é uma por mês, por veículo. A consulta é do mês
+    // corrente inteiro, e não "a última vistoria": a do motor pode ter sido
+    // numa semana anterior do mesmo mês, e pedi-la de novo seria cobrar duas
+    // vezes o mesmo trabalho.
+    (async () => {
+      if (!veiculoId) return;
+      const supabase = createClient();
+      const primeiroDoMes = hojeBR().slice(0, 8) + "01";
+      const { data, error } = await supabase
+        .from("checklists")
+        .select("itens")
+        .eq("veiculo_id", veiculoId)
+        .gte("data", primeiroDoMes);
+      if (!valeu) return;
+      // Na dúvida — consulta falhou —, não pede: barrar a vistoria semanal por
+      // causa de uma foto mensal que talvez já exista é o pior dos dois erros.
+      setPrecisaMotor(error ? false : precisaFotoDoMotor((data ?? []) as { itens: unknown }[]));
+    })();
+
     // A vistoria seguinte pode trocar de veículo antes desta resposta chegar.
     return () => {
       valeu = false;
@@ -294,7 +326,8 @@ export default function ChecklistPage() {
     }
     // Nomeia o que falta. "As fotos são obrigatórias" faz a pessoa reler o
     // formulário inteiro procurando o que esqueceu.
-    const faltando = ANGULOS.filter(([chave]) => !fotosAngulo[chave]).map(([, rotulo]) => rotulo);
+    const pedidas = fotosPedidas(precisaMotor === true);
+    const faltando = fotosFaltando(pedidas, (chave) => !!fotosAngulo[chave]);
     if (faltando.length > 0) {
       setErro(
         faltando.length === 1
@@ -320,7 +353,7 @@ export default function ChecklistPage() {
     const doBloqueio = apto === "NÃO" ? fotoBloqueio : [];
     setEnviadas(0);
     setTotalFotos(
-      ANGULOS.filter(([chave]) => fotosAngulo[chave]).length +
+      pedidas.filter(([chave]) => fotosAngulo[chave]).length +
         doBloqueio.length +
         listaAvarias.reduce((n, a) => n + a.fotos.length, 0),
     );
@@ -335,7 +368,7 @@ export default function ChecklistPage() {
       // Cinco fotos de celular somam dezenas de MB, e em fila cada uma tem a
       // banda inteira — além de o contador andar na tela enquanto isso.
       const subidas: { chave: string; url: string | null }[] = [];
-      for (const [chave] of ANGULOS) {
+      for (const [chave] of pedidas) {
         const arquivo = fotosAngulo[chave];
         const url = await enviarFoto(supabase, "checklists", `${veiculoId}/${chave}`, arquivo);
         if (arquivo) contar();
@@ -686,6 +719,28 @@ export default function ChecklistPage() {
                   onArquivo={(f) => setFotosAngulo((p) => ({ ...p, [chave]: f }))}
                 />
               ))}
+
+              {/* A sexta só aparece no mês em que é devida. Fora dele, nem o
+                  campo nem o aviso existem: lembrar o técnico toda semana de
+                  algo que ele não precisa fazer é como se ensina a ignorar
+                  aviso. */}
+              {precisaMotor && (
+                <div className="rounded-lg bg-acento-300/15 p-3 ring-1 ring-inset ring-acento-400">
+                  <div className="mb-2 text-[12.5px] leading-relaxed text-slate-700">
+                    <strong>A foto do motor é deste mês.</strong> Ela é pedida uma vez por mês,
+                    por veículo — este ainda não registrou a dele.
+                  </div>
+                  <CampoFoto
+                    rotulo={ANGULO_MOTOR[1]}
+                    dica={ANGULO_MOTOR[2]}
+                    obrigatoria
+                    arquivo={fotosAngulo[ANGULO_MOTOR[0]] ?? null}
+                    onArquivo={(f) =>
+                      setFotosAngulo((p) => ({ ...p, [ANGULO_MOTOR[0]]: f }))
+                    }
+                  />
+                </div>
+              )}
             </div>
           </Cartao>
 

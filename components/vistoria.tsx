@@ -21,7 +21,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeftRight, ImageOff, ImagePlus, Trash2, Undo2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { ANGULOS } from "@/lib/frota/angulos";
+import { ANGULOS_TODOS } from "@/lib/frota/angulos";
 import { anexarComoAvaria, anexarSemanais, removerAnexo } from "@/lib/frota/anexo";
 import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
 import { avisosDaTroca, registrarCorrecoes, type Mudanca, type Vizinha } from "@/lib/frota/correcao";
@@ -337,7 +337,7 @@ export function AnexarFotos({
       setErro("Esta vistoria não tem veículo — não dá para anexar foto nela.");
       return;
     }
-    const doAngulo = ANGULOS.filter(([chave]) => porAngulo[chave]);
+    const doAngulo = ANGULOS_TODOS.filter(([chave]) => porAngulo[chave]);
     const total =
       destino === "SEMANAL" ? doAngulo.length + outras.length : daAvaria.length;
     if (total === 0) {
@@ -417,7 +417,7 @@ export function AnexarFotos({
 
         {destino === "SEMANAL" ? (
           <div className="space-y-2.5">
-            {ANGULOS.map(([chave, rotulo, dica]) => (
+            {ANGULOS_TODOS.map(([chave, rotulo, dica]) => (
               <CampoFoto
                 key={chave}
                 rotulo={rotulo}

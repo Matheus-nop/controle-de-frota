@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Paperclip, Plus, Printer, X } from "lucide-react";
+import { Droplets, Paperclip, Plus, Printer, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/frota/tempo";
 import { emKm, emReais, paraDecimal, paraInteiro } from "@/lib/frota/numero";
@@ -15,6 +15,7 @@ import {
   resumoDaNota,
   ROTULOS_NOTA,
 } from "@/lib/frota/notas";
+import { semLavagemNoMes, TIPO_LAVAGEM, mesDe } from "@/lib/frota/limpeza";
 import {
   ehGarantia,
   faltaMigracaoDaGarantia,
@@ -35,6 +36,7 @@ import {
   Carregando,
   Checkbox,
   Input,
+  Modal,
   Pagina,
   Placa,
   Select,
@@ -78,7 +80,7 @@ type Manut = {
 };
 
 const ORIGENS = ["CHECKLIST SEMANAL", "ROTEIRO", "ACIDENTE/AVARIA", "PREVENTIVA PROGRAMADA", "OUTRO"];
-const TIPOS = ["PREVENTIVA", "CORRETIVA"];
+const TIPOS = ["PREVENTIVA", "CORRETIVA", "LAVAGEM"];
 const PRIORIDADES = ["BAIXA", "MÉDIA", "ALTA", "EMERGENCIAL"];
 const STATUS = ["AGENDADA", "ABERTA", "EM EXECUÇÃO", "CONCLUÍDA", "CANCELADA"];
 
@@ -113,6 +115,9 @@ const FILTROS: [string, string][] = [
   // quem paga. Uma em garantia pode estar aberta ou concluída — e a pergunta
   // que este filtro responde ("o que a oficina refez?") não liga para isso.
   ["GARANTIA", "Em garantia"],
+  // Lavagem é mensal e repete: sem filtro próprio, nove lavagens por mês
+  // enterrariam a manutenção mecânica na lista.
+  ["LAVAGEM", "Lavagens"],
   ["TODAS", "Todas"],
 ];
 
@@ -124,6 +129,7 @@ export default function ManutencaoPage() {
   const [carregando, setCarregando] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [filtro, setFiltro] = useState("ABERTAS");
+  const [lavagemOpen, setLavagemOpen] = useState(false);
 
   const carregar = useCallback(async () => {
     const supabase = createClient();
@@ -163,7 +169,9 @@ export default function ManutencaoPage() {
         ? m.status === "ABERTA" || m.status === "EM EXECUÇÃO"
         : filtro === "GARANTIA"
           ? ehGarantia(m.garantia)
-          : m.status === filtro,
+          : filtro === "LAVAGEM"
+            ? m.tipo === TIPO_LAVAGEM
+            : m.status === filtro,
   );
   const abertas = manuts.filter((m) => m.status === "ABERTA" || m.status === "EM EXECUÇÃO").length;
   const agendadas = manuts.filter((m) => m.status === "AGENDADA").length;
@@ -179,6 +187,11 @@ export default function ManutencaoPage() {
           : `${abertas} em aberto${agendadas ? ` · ${agendadas} agendada${agendadas === 1 ? "" : "s"}` : ""} · ${emReais(gastoTotal)} já pagos`
       }
       acoes={
+        <div className="flex flex-wrap gap-2">
+        <Botao onClick={() => setLavagemOpen(true)}>
+          <Droplets size={14} />
+          Lavagens do mês
+        </Botao>
         <Botao variante="primario" onClick={() => setAddOpen((x) => !x)}>
           {addOpen ? (
             "Fechar"
@@ -189,8 +202,22 @@ export default function ManutencaoPage() {
             </>
           )}
         </Botao>
+        </div>
       }
     >
+      {lavagemOpen && (
+        <ProgramarLavagens
+          veiculos={veiculos}
+          manuts={manuts}
+          onFechar={() => setLavagemOpen(false)}
+          onProgramado={() => {
+            setLavagemOpen(false);
+            setCarregando(true);
+            void carregar();
+          }}
+        />
+      )}
+
       {addOpen && (
         <NovaManutencao
           veiculos={veiculos}
@@ -234,6 +261,156 @@ export default function ManutencaoPage() {
         </div>
       )}
     </Pagina>
+  );
+}
+
+/** Programa a lavagem do mês dos veículos que ainda não têm uma.
+ *
+ *  De uma vez, e não um por um: são nove veículos e a mesma data, e abrir nove
+ *  manutenções à mão é o tipo de trabalho que simplesmente não acontece — o
+ *  mês passa e ninguém lavou.
+ *
+ *  Quem já tem lavagem agendada ou feita no mês não aparece. Agendada conta
+ *  como resolvida: marcar de novo criaria duplicata, que foi exatamente o que
+ *  aconteceu com as revisões do pacote.
+ */
+function ProgramarLavagens({
+  veiculos,
+  manuts,
+  onFechar,
+  onProgramado,
+}: {
+  veiculos: Veiculo[];
+  manuts: Manut[];
+  onFechar: () => void;
+  onProgramado: () => void;
+}) {
+  const mes = mesDe(hojeBR());
+  const lavagens = manuts
+    .filter((m) => m.tipo === TIPO_LAVAGEM)
+    .map((m) => ({
+      veiculo_id: m.veiculo_id,
+      status: m.status,
+      agendada_para: m.agendada_para ?? null,
+      concluida_em: m.concluida_em,
+    }));
+  const faltando = semLavagemNoMes(veiculos, lavagens, mes);
+
+  const [data, setData] = useState(hojeBR());
+  const [oficina, setOficina] = useState("");
+  const [orcamento, setOrcamento] = useState("");
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(
+    () => new Set(faltando.map((v) => v.id)),
+  );
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function programar() {
+    setErro(null);
+    if (escolhidos.size === 0) {
+      setErro("Escolha ao menos um veículo.");
+      return;
+    }
+    if (!data) {
+      setErro("Escolha o dia da lavagem.");
+      return;
+    }
+    setSalvando(true);
+    try {
+      const supabase = createClient();
+      const linhas = [...escolhidos].map((id) => ({
+        veiculo_id: id,
+        descricao_problema: `Lavagem mensal — ${mes.slice(5)}/${mes.slice(0, 4)}`,
+        tipo: TIPO_LAVAGEM,
+        origem: "PREVENTIVA PROGRAMADA",
+        oficina: oficina.trim() || null,
+        orcamento: paraDecimal(orcamento),
+        agendada_para: data,
+        status: "AGENDADA",
+      }));
+      const { error } = await supabase.from("manutencoes").insert(linhas);
+      if (error) throw error;
+      onProgramado();
+    } catch (err) {
+      setErro(mensagemDeErro(err, "a programação das lavagens"));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal aberto titulo="Lavagens do mês" onFechar={onFechar}>
+      {faltando.length === 0 ? (
+        <>
+          <p className="text-[13px] leading-relaxed text-slate-600">
+            Todos os veículos já têm lavagem neste mês — agendada ou feita. Nada a programar.
+          </p>
+          <div className="mt-3.5">
+            <Botao onClick={onFechar}>Fechar</Botao>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mb-3 text-[13px] leading-relaxed text-slate-600">
+            {faltando.length === 1
+              ? "Um veículo ainda não tem lavagem neste mês."
+              : `${faltando.length} veículos ainda não têm lavagem neste mês.`}{" "}
+            Cada um vira uma manutenção agendada do tipo LAVAGEM — com valor e nota fiscal, como
+            qualquer serviço pago.
+          </p>
+
+          <div className="mb-3 max-h-[220px] overflow-y-auto rounded-lg ring-1 ring-inset ring-slate-200">
+            {faltando.map((v) => (
+              <label
+                key={v.id}
+                className="flex cursor-pointer items-center gap-2.5 border-b border-slate-100 px-3 py-2 last:border-b-0"
+              >
+                <Checkbox
+                  checked={escolhidos.has(v.id)}
+                  onChange={(e) =>
+                    setEscolhidos((p) => {
+                      const n = new Set(p);
+                      if (e.target.checked) n.add(v.id);
+                      else n.delete(v.id);
+                      return n;
+                    })
+                  }
+                />
+                <Placa>{v.placa}</Placa>
+                <span className="text-[12.5px] text-slate-500">{v.modelo}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <Campo rotulo="Dia">
+              <Input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+            </Campo>
+            <Campo rotulo="Oficina / lava-jato">
+              <Input value={oficina} onChange={(e) => setOficina(e.target.value)} />
+            </Campo>
+            <CampoNumero
+              rotulo="Orçamento por veículo"
+              unidade="reais"
+              valor={orcamento}
+              onValor={setOrcamento}
+            />
+          </div>
+
+          {erro && (
+            <div className="mt-2.5">
+              <Aviso>{erro}</Aviso>
+            </div>
+          )}
+          <div className="mt-3.5 flex items-center gap-2">
+            <Botao variante="primario" onClick={programar} disabled={salvando}>
+              {salvando ? "Programando…" : `Programar ${escolhidos.size}`}
+            </Botao>
+            <Botao onClick={onFechar}>Cancelar</Botao>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }
 

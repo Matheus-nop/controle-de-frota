@@ -68,3 +68,46 @@ export function faltaMigracaoDaLimpeza(erro: { code?: string; message?: string }
   // 42P01 = undefined_table, quando o pedido chega ao Postgres.
   return erro.code === "PGRST205" || erro.code === "42P01" || /limpezas/i.test(erro.message ?? "");
 }
+
+// ---------------------------------------------------------------------------
+// Lavagem mensal
+// ---------------------------------------------------------------------------
+// A lavagem é o SERVIÇO pago, mensal, num prestador — e por isso mora em
+// `manutencoes` com tipo LAVAGEM, onde já existem valor, nota fiscal, oficina
+// e ordem de serviço. A limpeza acima é a CONFERÊNCIA semanal da expedição,
+// de graça, por dentro. Uma verifica, a outra executa.
+
+export const TIPO_LAVAGEM = "LAVAGEM";
+
+export type LavagemRegistro = {
+  veiculo_id: string;
+  status: string;
+  agendada_para: string | null;
+  concluida_em: string | null;
+};
+
+/** O mês-calendário de uma data: "2026-10". É assim que a equipe conta — a
+ *  cobrança é "este mês já foi?", pergunta que uma janela de 30 dias não
+ *  responde. */
+export function mesDe(iso: string): string {
+  return iso.slice(0, 7);
+}
+
+/** Os veículos que ainda não têm lavagem neste mês — agendada ou feita.
+ *
+ *  Agendada conta: já está resolvida, marcar de novo criaria duplicata. A
+ *  cancelada não conta, porque voltou a faltar. É a mesma regra do saldo dos
+ *  pacotes, pela mesma razão. */
+export function semLavagemNoMes<T extends { id: string }>(
+  veiculos: T[],
+  lavagens: LavagemRegistro[],
+  mes: string,
+): T[] {
+  const cobertos = new Set<string>();
+  for (const l of lavagens) {
+    if (l.status === "CANCELADA") continue;
+    const quando = l.concluida_em ?? l.agendada_para;
+    if (quando && mesDe(quando) === mes) cobertos.add(l.veiculo_id);
+  }
+  return veiculos.filter((v) => !cobertos.has(v.id));
+}
