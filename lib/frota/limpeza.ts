@@ -111,3 +111,43 @@ export function semLavagemNoMes<T extends { id: string }>(
   }
   return veiculos.filter((v) => !cobertos.has(v.id));
 }
+
+/**
+ * O escopo da lavagem mensal: o que o lava-jato tem que fazer, item por item.
+ *
+ * Não é a mesma lista de `ITENS_LIMPEZA`, e isso é de propósito. Aquela é o que
+ * a expedição CONFERE toda semana, por fora e de graça; esta é o que se COMPRA
+ * uma vez por mês, e tem coisa que só entra no serviço pago — motor, chassi,
+ * acabamento. Juntar as duas numa lista só faria o papel do lava-jato pedir
+ * conferência e a conferência da expedição cobrar serviço.
+ *
+ * Mora aqui e não no banco pelo mesmo motivo da lista semanal: são oito linhas,
+ * e uma tela de cadastro para elas é trabalho que ninguém pediu.
+ */
+export const ITENS_LAVAGEM: [string, string][] = [
+  ["externa", "Lavagem externa: lataria, para-choques e vidros"],
+  ["rodas", "Rodas, pneus e caixas de roda"],
+  ["cabine", "Cabine aspirada: painel, console e bancos"],
+  ["piso", "Piso e tapetes lavados"],
+  ["carga", "Área de carga: caçamba, baú ou porta-malas"],
+  ["motor", "Compartimento do motor — sem jato direto na parte elétrica"],
+  ["chassi", "Chassi e parte de baixo"],
+  ["acabamento", "Secagem e acabamento, sem marca de água no vidro"],
+];
+
+/**
+ * O papel desta manutenção: a ordem de serviço, ou o formulário de lavagem.
+ *
+ * A lavagem usava a ordem de serviço da oficina, e o lava-jato recebia uma
+ * folha pedindo peças substituídas, km na entrega e próxima revisão — três
+ * coisas que não existem numa lavagem. Quem lê um papel que pergunta o que não
+ * se aplica conclui, com razão, que o papel não é para ele.
+ */
+export function papelDaManutencao(tipo: string | null, id: string): string {
+  return tipo === TIPO_LAVAGEM ? `/manutencao/lavagem?id=${id}` : `/manutencao/ordem?id=${id}`;
+}
+
+/** O rótulo do botão que imprime esse papel. */
+export function rotuloDoPapel(tipo: string | null): string {
+  return tipo === TIPO_LAVAGEM ? "Formulário de lavagem" : "Ordem de serviço";
+}

@@ -24,9 +24,13 @@ mesmo dia. Mudou lá, muda aqui.
 - `app/globals.css` — tokens da marca (`brand-*`, `acento-*`, `acao-*`) e os
   utilitários `.campo`, `.rotulo`, `.tabela`, `.toque`, `.placa`.
 - `components/ui.tsx` — Botao, Cartao, Pagina, Contador, Modal, Badge, Campo…
+- `components/folha-a4.tsx` — o papel corporativo: cabeçalho com logomarca
+  que repete por página, faixa do título, seções numeradas, quadro de pares,
+  tabela de documento, caixas para marcar e assinaturas. Mesmo desenho das
+  folhas do app de Estoque, com os tokens de cor daqui. Papel novo usa o kit.
 - `components/Casca.tsx` — topo, abas por papel, gaveta e menu do usuário.
-  Aplicada pelo route group `app/(app)/`; ficam de fora só `/login` e a ordem
-  de serviço em A4.
+  Aplicada pelo route group `app/(app)/`; ficam de fora só `/login` e os
+  papéis em A4.
 - Ícones: `lucide-react`. Emoji não, que muda de desenho a cada aparelho.
 
 ## Vocabulário do domínio
@@ -36,6 +40,8 @@ mesmo dia. Mudou lá, muda aqui.
 - **PCM**: planejamento e controle de manutenção — abre e fecha ordem de serviço.
 - **ponto**: o time da folha, que confere horário de saída e chegada em `/ponto`.
 - **ordem de serviço**: o papel que vai com o veículo para a oficina.
+- **formulário de lavagem**: o papel que vai com o veículo para o lava-jato.
+  Não é ordem de serviço: lavagem não tem peça, km de entrega nem revisão.
 - **checklist**: vistoria semanal do veículo, feita pelo técnico — fala de
   segurança: pneu, freio, luz.
 - **limpeza**: conferência semanal de limpeza, feita pela expedição — fala de
@@ -61,7 +67,9 @@ mesmo dia. Mudou lá, muda aqui.
       lidos dos manuais, e revisões programadas (agendamento e pacotes de
       revisão gratuita do prestador)
 - [~] Fase 10 — indicadores com gráficos para reunião (adesão a roteiro e
-      vistoria, avarias, gastos) e checklist de limpeza semanal pela expedição
+      vistoria, avarias, gastos), checklist de limpeza semanal pela expedição,
+      foto do motor uma vez por mês e a lavagem mensal: formulário próprio para
+      o lava-jato e o papel do mês para a reunião
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.
 Metodologia das revisões programadas: `docs/revisoes-programadas.md`.
