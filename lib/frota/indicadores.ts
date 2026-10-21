@@ -9,7 +9,7 @@
 // uma porcentagem sem denominador é um número que ninguém sabe contestar numa
 // reunião, e é justamente ali que ela precisa aguentar pergunta.
 
-import { quantasAvarias } from "./avarias";
+import { quantasAvarias } from "./avarias.ts";
 
 export type Taxa = {
   /** O nome da linha: o técnico, a placa. */
