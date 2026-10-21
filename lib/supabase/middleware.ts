@@ -15,10 +15,11 @@ type Papel = "GESTOR" | "PCM" | "PONTO" | "TECNICO";
 // Cuidado com os dois parecidos: /ocorrencia (singular) e o relato do tecnico
 // e fica livre; /ocorrencias (plural) e a fila do gestor.
 const ACESSO: Array<{ rota: string; papeis: Papel[] }> = [
-  { rota: "/veiculos", papeis: ["GESTOR"] },
+  { rota: "/veiculos", papeis: ["GESTOR", "PCM"] },
   { rota: "/usuarios", papeis: ["GESTOR"] },
   { rota: "/relatorios", papeis: ["GESTOR"] },
   { rota: "/ocorrencias", papeis: ["GESTOR"] },
+  { rota: "/consumo", papeis: ["GESTOR", "PCM"] },
   { rota: "/historico", papeis: ["GESTOR", "PCM"] },
   { rota: "/alertas", papeis: ["GESTOR", "PCM"] },
   { rota: "/manutencao", papeis: ["GESTOR", "PCM"] },

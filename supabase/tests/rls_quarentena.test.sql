@@ -62,13 +62,16 @@ select is(
   (select count(*) from public.roteiros_quarentena)::int, 1,
   'Gestor enxerga a quarentena');
 
+-- O update roda solto e a leitura vem depois. Era uma CTE que escrevia dentro
+-- do argumento do is(), e o Postgres recusa: "WITH clause containing a
+-- data-modifying statement must be at the top level". A transacao abortava ali
+-- e esta assercao nunca chegou a rodar.
+update public.roteiros_quarentena
+   set resolvido = true, resolucao = 'promovido para roteiros'
+ where linha_origem = 'LINHA-1';
 select is(
-  (with u as (
-     update public.roteiros_quarentena
-        set resolvido = true, resolucao = 'promovido para roteiros'
-      where linha_origem = 'LINHA-1'
-      returning 1)
-   select count(*) from u)::int, 1,
+  (select resolvido from public.roteiros_quarentena where linha_origem = 'LINHA-1'),
+  true,
   'Gestor consegue marcar como resolvido');
 
 select * from finish();

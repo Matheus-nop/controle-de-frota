@@ -6,6 +6,10 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Os testes de `lib/` rodam no Node com --experimental-strip-types, que
+    // exige o `.ts` no import (ele não resolve extensão). Com noEmit nada é
+    // gerado, então o bundler do Next continua sem ver essas linhas.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
