@@ -67,7 +67,7 @@ select is(
 select throws_ok(
   $$ insert into public.veiculos (placa, modelo) values ('TEST9999','X') $$,
   '42501',
-  'Tecnica NAO consegue cadastrar veiculo (so gestor escreve)');
+  'Tecnica NAO consegue cadastrar veiculo (so gestor e PCM escrevem)');
 
 -- ---- como Bia (tecnica) ----
 select set_config('request.jwt.claims',

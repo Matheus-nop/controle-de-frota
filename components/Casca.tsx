@@ -64,7 +64,7 @@ const MENU: ItemMenu[] = [
   { href: "/historico", rotulo: "Histórico", icone: History, papeis: ["GESTOR", "PCM"] },
   { href: "/comparativo", rotulo: "Comparar", icone: GitCompareArrows, papeis: ["GESTOR", "PCM"] },
   { href: "/ponto", rotulo: "Ponto", icone: Clock, papeis: ["GESTOR", "PONTO"] },
-  { href: "/veiculos", rotulo: "Veículos", icone: Car, papeis: ["GESTOR"], sep: true },
+  { href: "/veiculos", rotulo: "Veículos", icone: Car, papeis: ["GESTOR", "PCM"], sep: true },
   { href: "/usuarios", rotulo: "Usuários", icone: Users, papeis: ["GESTOR"] },
   { href: "/indicadores", rotulo: "Indicadores", icone: TrendingUp, papeis: ["GESTOR", "PCM"] },
   { href: "/relatorios", rotulo: "Relatórios", icone: BarChart3, papeis: ["GESTOR"] },

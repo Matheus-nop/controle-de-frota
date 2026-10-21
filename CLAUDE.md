@@ -37,7 +37,9 @@ mesmo dia. Mudou lá, muda aqui.
 - **roteiro**: uma saída + a chegada correspondente. É a unidade de trabalho.
 - **placa**: sempre normalizada, sem espaço nem hífen (SRT9D55).
 - **técnico**: quem dirige. **gestor**: quem administra a frota.
-- **PCM**: planejamento e controle de manutenção — abre e fecha ordem de serviço.
+- **PCM**: planejamento e controle de manutenção — abre e fecha ordem de
+  serviço, e cadastra veículo (é quem conhece o que chega). Não lança roteiro
+  nem mexe em quem entra no app.
 - **ponto**: o time da folha, que confere horário de saída e chegada em `/ponto`.
 - **ordem de serviço**: o papel que vai com o veículo para a oficina.
 - **formulário de lavagem**: o papel que vai com o veículo para o lava-jato.

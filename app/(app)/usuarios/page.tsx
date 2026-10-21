@@ -45,7 +45,7 @@ type Login = { user_id: string; email: string; criado_em: string };
 const PAPEIS = [
   { valor: "TECNICO", rotulo: "Técnico", ajuda: "Lança roteiro, checklist e ocorrência. Vê só o que é dele." },
   { valor: "GESTOR", rotulo: "Gestor", ajuda: "Painel completo, veículos, ocorrências e cadastro de acesso." },
-  { valor: "PCM", rotulo: "PCM", ajuda: "Manutenção, checklists e alertas. Não cadastra veículo nem lança roteiro." },
+  { valor: "PCM", rotulo: "PCM", ajuda: "Manutenção, checklists, alertas e cadastro de veículo. Não lança roteiro nem mexe em quem entra no app." },
   { valor: "PONTO", rotulo: "Ponto", ajuda: "Só lê o horário dos roteiros, em /ponto. Não escreve em nada." },
 ];
 

@@ -76,13 +76,18 @@ select lives_ok(
              'AVARIA', 'Pneu dianteiro careca', 'MODERADA') $$,
   'Ana consegue relatar ocorrencia em nome dela mesma');
 
--- classificar/resolver e trabalho do gestor: o UPDATE do tecnico nao pega linha
+-- classificar/resolver e trabalho do gestor: o UPDATE do tecnico nao pega linha.
+--
+-- O update roda solto e a leitura vem depois. Era uma CTE que escrevia dentro
+-- do argumento do is(), e o Postgres recusa: "WITH clause containing a
+-- data-modifying statement must be at the top level". A transacao abortava ali
+-- e daqui para baixo nada rodava.
+update public.ocorrencias set status = 'RESOLVIDA', resolvida_em = current_date
+ where id = 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1';
 select is(
-  (with u as (
-     update public.ocorrencias set status = 'RESOLVIDA', resolvida_em = current_date
-     where id = 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1'
-     returning 1)
-   select count(*) from u)::int, 0,
+  (select status from public.ocorrencias
+    where id = 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1'),
+  'ABERTA',
   'Ana NAO consegue resolver a propria ocorrencia (UPDATE e do gestor)');
 
 -- ---- como Gestor ----
@@ -93,12 +98,12 @@ select is(
   (select count(*) from public.ocorrencias)::int, 3,
   'Gestor enxerga as 3 ocorrencias');
 
+update public.ocorrencias set status = 'RESOLVIDA', resolvida_em = current_date
+ where id = 'f2f2f2f2-f2f2-f2f2-f2f2-f2f2f2f2f2f2';
 select is(
-  (with u as (
-     update public.ocorrencias set status = 'RESOLVIDA', resolvida_em = current_date
-     where id = 'f2f2f2f2-f2f2-f2f2-f2f2-f2f2f2f2f2f2'
-     returning 1)
-   select count(*) from u)::int, 1,
+  (select status from public.ocorrencias
+    where id = 'f2f2f2f2-f2f2-f2f2-f2f2-f2f2f2f2f2f2'),
+  'RESOLVIDA',
   'Gestor consegue resolver a ocorrencia');
 
 select * from finish();

@@ -5,8 +5,9 @@
 -- O que precisa ficar provado aqui, porque e onde da errado:
 --   * PONTO le roteiro (e o trabalho dele) e NAO escreve nada.
 --   * PCM escreve manutencao (e o trabalho dele) e NAO mexe em roteiro.
---   * nenhum dos dois vira gestor por tabela: cadastrar veiculo continua
---     fechado para os dois.
+--   * nenhum dos dois vira gestor por tabela: PONTO nao escreve em veiculo, e
+--     nenhum dos dois mexe em `tecnicos`. (Cadastrar veiculo era fechado para
+--     os dois ate a 0031, que abriu para o PCM.)
 --
 -- Mesma estrategia dos outros: fixtures como dono (ignora RLS), depois
 -- `set local role authenticated` e troca do claim `sub` para virar cada um.
@@ -73,11 +74,17 @@ select isnt(
   (select hora_chegada from public.v_conferencia_ponto limit 1), null,
   'a view entrega a hora de chegada do roteiro fechado');
 
--- so leitura: nao lanca roteiro nem corrige o dos outros
-select throws_ok(
-  $$ update public.roteiros set km_chegada = 9999
-      where id = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a' returning 1 $$,
-  '42501',
+-- so leitura: nao lanca roteiro nem corrige o dos outros.
+--
+-- Isto era um throws_ok e NUNCA provou nada: update barrado pela RLS nao
+-- levanta erro. O `using` nao acha linha, o comando volta com zero linhas e a
+-- transacao segue. O que se prova e que o DADO NAO MUDOU — o roteiro da Ana
+-- continua com os 1150 km que ela lancou.
+update public.roteiros set km_chegada = 9999
+  where id = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a';
+select is(
+  (select km_chegada from public.roteiros
+    where id = '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a'), 1150,
   'PONTO NAO corrige o km de um roteiro');
 
 select throws_ok(
@@ -101,10 +108,12 @@ select lives_ok(
       where id = 'd1d1d1d1-d1d1-d1d1-d1d1-d1d1d1d1d1d1' $$,
   'PCM poe o veiculo na oficina (senao ele continuaria disponivel no painel)');
 
-select throws_ok(
+-- Cadastrar veiculo era do gestor ate a 0031. Virou do PCM tambem: quem
+-- conhece o veiculo que chega e ele. O que o PCM continua NAO podendo e
+-- apagar veiculo e mexer em `tecnicos` — provado em rls_veiculos_pcm.test.sql.
+select lives_ok(
   $$ insert into public.veiculos (placa, modelo) values ('NOVO0001', 'Inventado') $$,
-  '42501',
-  'PCM NAO cadastra veiculo — isso continua sendo do gestor');
+  'PCM cadastra veiculo (0031)');
 
 select throws_ok(
   $$ insert into public.roteiros (veiculo_id, tecnico_saida_id, saida_em, km_saida)
