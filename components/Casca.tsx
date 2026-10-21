@@ -19,6 +19,7 @@ import {
   LogOut,
   Menu,
   Plus,
+  Fuel,
   RefreshCw,
   ShieldAlert,
   Sparkles,
@@ -67,6 +68,7 @@ const MENU: ItemMenu[] = [
   { href: "/veiculos", rotulo: "Veículos", icone: Car, papeis: ["GESTOR", "PCM"], sep: true },
   { href: "/usuarios", rotulo: "Usuários", icone: Users, papeis: ["GESTOR"] },
   { href: "/indicadores", rotulo: "Indicadores", icone: TrendingUp, papeis: ["GESTOR", "PCM"] },
+  { href: "/consumo", rotulo: "Consumo", icone: Fuel, papeis: ["GESTOR", "PCM"] },
   { href: "/relatorios", rotulo: "Relatórios", icone: BarChart3, papeis: ["GESTOR"] },
 ];
 

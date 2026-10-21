@@ -12,6 +12,11 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 - Nome de pessoa nunca é texto livre. FK para tecnicos, sempre.
 - Toda entrada de km é validada contra o km anterior do veículo.
 - RLS ativa em todas as tabelas. Política nova exige teste que prove o bloqueio.
+- Conta que decide alguma coisa tem teste. `npm test` roda os testes puros de
+  `lib/` (Node, `node:test` + `--experimental-strip-types`, sem dependência
+  nova); `supabase/tests/*.test.sql` prova a RLS. Atenção: update barrado pela
+  RLS **não levanta erro** — o `using` só não acha linha. Prove que o dado não
+  mudou, não que deu erro.
 - Português nos campos, tabelas e UI. É o idioma de quem usa.
 - Nada de estilo em linha nem de `<style>` por tela. Toda tela usa o kit em
   `components/ui.tsx` e os tokens do `app/globals.css`. Peça nova é peça no kit.
@@ -72,6 +77,9 @@ mesmo dia. Mudou lá, muda aqui.
       vistoria, avarias, gastos), checklist de limpeza semanal pela expedição,
       foto do motor uma vez por mês e a lavagem mensal: formulário próprio para
       o lava-jato e o papel do mês para a reunião
+- [~] Fase 11 — o PCM cadastra veículo, e o comparador de consumo (`/consumo`):
+      digita a distância e vê quanto cada veículo custaria nela, por
+      combustível ou somando a manutenção que ele realmente deu
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.
 Metodologia das revisões programadas: `docs/revisoes-programadas.md`.

@@ -19,6 +19,7 @@ const ACESSO: Array<{ rota: string; papeis: Papel[] }> = [
   { rota: "/usuarios", papeis: ["GESTOR"] },
   { rota: "/relatorios", papeis: ["GESTOR"] },
   { rota: "/ocorrencias", papeis: ["GESTOR"] },
+  { rota: "/consumo", papeis: ["GESTOR", "PCM"] },
   { rota: "/historico", papeis: ["GESTOR", "PCM"] },
   { rota: "/alertas", papeis: ["GESTOR", "PCM"] },
   { rota: "/manutencao", papeis: ["GESTOR", "PCM"] },
