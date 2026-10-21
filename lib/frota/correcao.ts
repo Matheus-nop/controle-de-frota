@@ -25,8 +25,8 @@
 // histórico seis meses depois — e não são, principalmente numa conversa sobre
 // quem bateu o veículo.
 
-import { emKm } from "./numero";
-import { dataBR } from "./tempo";
+import { emKm } from "./numero.ts";
+import { dataBR } from "./tempo.ts";
 
 /** Uma correção feita depois do envio. */
 export type Correcao = {
@@ -46,10 +46,15 @@ function texto(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
-/** As correções já gravadas, da mais antiga para a mais nova. */
-export function correcoesDe(itens: unknown): Correcao[] {
-  if (!itens || typeof itens !== "object") return [];
-  const bruto = (itens as Record<string, unknown>).correcoes;
+/**
+ * A lista de correções, lida de um jsonb que é a PRÓPRIA lista.
+ *
+ * A vistoria guarda as dela dentro de `itens.correcoes` (o jsonb já existia);
+ * o roteiro guarda numa coluna `correcoes` só dela (não havia jsonb onde
+ * pendurar). Duas moradas, um leitor — senão a tela do histórico precisaria
+ * saber de qual tabela veio cada linha para saber como ler o rastro.
+ */
+export function correcoesDaLista(bruto: unknown): Correcao[] {
   if (!Array.isArray(bruto)) return [];
   return bruto
     .map((c) => {
@@ -60,6 +65,28 @@ export function correcoesDe(itens: unknown): Correcao[] {
       return { campo, de: texto(o.de), para: texto(o.para), por: texto(o.por), em: texto(o.em) };
     })
     .filter((c): c is Correcao => c !== null);
+}
+
+/** As correções já gravadas num `itens` de vistoria, da mais antiga para a mais nova. */
+export function correcoesDe(itens: unknown): Correcao[] {
+  if (!itens || typeof itens !== "object") return [];
+  return correcoesDaLista((itens as Record<string, unknown>).correcoes);
+}
+
+/**
+ * A lista nova depois de carimbar as mudanças. Mudança que não muda nada não
+ * entra — ver `registrarCorrecoes`.
+ */
+export function acrescentarCorrecoes(
+  lista: Correcao[],
+  mudancas: Mudanca[],
+  quem: string | null,
+  agora: string = new Date().toISOString(),
+): Correcao[] {
+  const novas = mudancas
+    .filter((m) => (m.de ?? "") !== (m.para ?? ""))
+    .map((m) => ({ campo: m.campo, de: m.de, para: m.para, por: quem || "gestor", em: agora }));
+  return novas.length === 0 ? lista : [...lista, ...novas];
 }
 
 /**
@@ -82,11 +109,10 @@ export function registrarCorrecoes(
     string,
     unknown
   >;
-  const novas = mudancas
-    .filter((m) => (m.de ?? "") !== (m.para ?? ""))
-    .map((m) => ({ campo: m.campo, de: m.de, para: m.para, por: quem || "gestor", em: agora }));
-  if (novas.length === 0) return base;
-  base.correcoes = [...correcoesDe(base), ...novas];
+  const antes = correcoesDe(base);
+  const depois = acrescentarCorrecoes(antes, mudancas, quem, agora);
+  if (depois === antes) return base;
+  base.correcoes = depois;
   return base;
 }
 
@@ -95,6 +121,12 @@ export function resumoDaCorrecao(c: Correcao): string {
   const nome = c.campo === "veiculo" ? "veículo" : c.campo;
   return `${nome}: ${c.de ?? "—"} → ${c.para ?? "—"}`;
 }
+
+/** Os nomes de campo do roteiro, escritos como a tela mostra. Texto solto no
+ *  jsonb, e não enum: campo novo não pode quebrar a leitura de registro
+ *  antigo. */
+export const CAMPO_KM_SAIDA = "km de saída";
+export const CAMPO_KM_CHEGADA = "km de chegada";
 
 /* --------------------------------------------------- conferência da troca */
 

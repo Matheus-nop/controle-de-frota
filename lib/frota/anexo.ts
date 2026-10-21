@@ -23,7 +23,7 @@
 // E o que o técnico mandou não se apaga por aqui: `removerAnexo` só tira URL
 // que está no mapa de anexos — ou seja, só desfaz o que o próprio gestor fez.
 
-import { listaDeAvariasParaGravar, urls, type AvariaGravada } from "./avarias";
+import { listaDeAvariasParaGravar, urls, type AvariaGravada } from "./avarias.ts";
 
 /** Quem anexou e quando. */
 export type Anexo = { por: string; em: string };

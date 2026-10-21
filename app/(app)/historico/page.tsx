@@ -8,6 +8,7 @@ import {
   ImageOff,
   ImagePlus,
   RotateCcw,
+  Ruler,
   Trash2,
   Truck,
   type LucideIcon,
@@ -16,7 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import { legendaDoAngulo } from "@/lib/frota/angulos";
 import { faltaMigracaoDaAnulacao } from "@/lib/frota/anulacao";
 import { fotoAnexada } from "@/lib/frota/anexo";
-import { correcoesDe, resumoDaCorrecao } from "@/lib/frota/correcao";
+import { correcoesDaLista, correcoesDe, resumoDaCorrecao } from "@/lib/frota/correcao";
 import { mensagemDeErro } from "@/lib/frota/erro";
 import { diaDe, diaHoraDe, intervaloUTC, periodoPadrao } from "@/lib/frota/tempo";
 import { emKm } from "@/lib/frota/numero";
@@ -29,6 +30,7 @@ import {
   type FotoDaVistoria,
   type Vistoria,
 } from "@/components/vistoria";
+import { CorrigirKm, type RoteiroParaCorrigir } from "@/components/roteiro";
 import {
   Aviso,
   Badge,
@@ -81,6 +83,8 @@ type Registro = {
   correcoes: { campo: string; de: string | null; para: string | null; por: string | null; em: string | null }[];
   /** Só no CHECKLIST: a vistoria que o gestor tirou do ar. */
   anulada: { por: string | null; em: string; motivo: string | null } | null;
+  /** Só no ROTEIRO: o que a correção de km precisa para conferir e gravar. */
+  roteiro: RoteiroParaCorrigir | null;
 };
 
 const TOM_TIPO: Record<string, Tom> = {
@@ -275,6 +279,7 @@ export default function HistoricoPage() {
         checklistId: c.id,
         km: c.km_atual ?? null,
         correcoes: correcoesDe(itens),
+        roteiro: null,
         veiculoId: c.veiculo_id,
         itens,
         anulada: c.anulada_em
@@ -314,9 +319,21 @@ export default function HistoricoPage() {
         checklistId: null,
         veiculoId: null,
         km: null,
-        correcoes: [],
+        correcoes: correcoesDaLista(r.correcoes),
         itens: null,
         anulada: null,
+        roteiro: {
+          id: r.id,
+          veiculoId: r.veiculo_id,
+          placa: r.placa ?? "—",
+          modelo: r.modelo ?? "",
+          data: diaDe(r.saida_em) ?? "",
+          saidaEm: r.saida_em,
+          tecnico: r.tecnico_saida ?? "—",
+          kmSaida: r.km_saida ?? null,
+          kmChegada: r.km_chegada ?? null,
+          correcoes: correcoesDaLista(r.correcoes),
+        },
       });
     }
 
@@ -341,6 +358,7 @@ export default function HistoricoPage() {
         correcoes: [],
         itens: null,
         anulada: null,
+        roteiro: null,
       });
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -530,6 +548,7 @@ function CartaoRegistro({
   const [trocando, setTrocando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [restaurando, setRestaurando] = useState(false);
+  const [corrigindoKm, setCorrigindoKm] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const Icone = ICONE[r.tipo];
   // O registro do histórico é mais largo do que as peças de correção precisam.
@@ -660,6 +679,30 @@ function CartaoRegistro({
             </>
           )}
         </div>
+      )}
+
+      {/* Corrigir km é do gestor (ou do técnico do próprio roteiro). O botão
+          aparece para quem chega no histórico e a RLS de `roteiros` decide de
+          verdade — o PCM recebe o aviso em vez de um erro cru. */}
+      {r.tipo === "ROTEIRO" && r.roteiro && (
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <Botao tamanho="sm" onClick={() => setCorrigindoKm(true)}>
+            <Ruler size={13} />
+            Corrigir km
+          </Botao>
+        </div>
+      )}
+
+      {corrigindoKm && r.roteiro && (
+        <CorrigirKm
+          r={r.roteiro}
+          quem={quem}
+          onFechar={() => setCorrigindoKm(false)}
+          onSalvo={() => {
+            setCorrigindoKm(false);
+            onMudou();
+          }}
+        />
       )}
 
       {erro && (

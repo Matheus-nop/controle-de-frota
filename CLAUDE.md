@@ -10,7 +10,10 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 - Nada de cálculo derivado gravado em tabela. km_rodado, custo_km e situação
   são coluna gerada ou view. Se precisar de um número novo, é view.
 - Nome de pessoa nunca é texto livre. FK para tecnicos, sempre.
-- Toda entrada de km é validada contra o km anterior do veículo.
+- Toda entrada de km é validada contra o km anterior do veículo. Na tela de
+  correção (`CorrigirKm`) a validação AVISA em vez de travar: quem conserta
+  dado torto costuma ter dois roteiros errados em sequência, e travar
+  prenderia os dois. Trava só o que o banco recusaria.
 - RLS ativa em todas as tabelas. Política nova exige teste que prove o bloqueio.
 - Conta que decide alguma coisa tem teste. `npm test` roda os testes puros de
   `lib/` (Node, `node:test` + `--experimental-strip-types`, sem dependência
@@ -77,9 +80,10 @@ mesmo dia. Mudou lá, muda aqui.
       vistoria, avarias, gastos), checklist de limpeza semanal pela expedição,
       foto do motor uma vez por mês e a lavagem mensal: formulário próprio para
       o lava-jato e o papel do mês para a reunião
-- [~] Fase 11 — o PCM cadastra veículo, e o comparador de consumo (`/consumo`):
+- [~] Fase 11 — o PCM cadastra veículo; o comparador de consumo (`/consumo`):
       digita a distância e vê quanto cada veículo custaria nela, por
-      combustível ou somando a manutenção que ele realmente deu
+      combustível ou somando a manutenção que ele realmente deu; e a correção
+      do km de um roteiro pelo gestor, em `/historico`, com rastro
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.
 Metodologia das revisões programadas: `docs/revisoes-programadas.md`.

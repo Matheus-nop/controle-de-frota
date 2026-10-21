@@ -10,9 +10,9 @@
 // Fase 3), caimos no SEED_DADOS para o painel renderizar contra dados reais.
 
 import { createClient } from "@/lib/supabase/server";
-import { SEED_DADOS } from "./seed";
-import { diaDe, duracaoEntre, horaDe, hojeBR } from "./tempo";
-import { faltaMigracaoDaAnulacao } from "./anulacao";
+import { SEED_DADOS } from "./seed.ts";
+import { diaDe, duracaoEntre, horaDe, hojeBR } from "./tempo.ts";
+import { faltaMigracaoDaAnulacao } from "./anulacao.ts";
 import type {
   AlertaAtivoDados,
   Dados,
@@ -21,7 +21,7 @@ import type {
   CustoDados,
   ManutencaoDados,
   ChecklistDados,
-} from "./types";
+} from "./types.ts";
 
 export type FonteDados = "supabase" | "seed";
 

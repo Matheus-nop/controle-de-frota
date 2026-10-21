@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { reduzirFoto } from "./imagem";
-import { falhaDeRede } from "./erro";
+import { reduzirFoto } from "./imagem.ts";
+import { falhaDeRede } from "./erro.ts";
 
 // Quantas vezes insistir quando a conexão cai. Três tentativas cobrem o buraco
 // de sinal na saída do galpão sem deixar o técnico esperando um minuto por uma
