@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { paraDecimal, paraInteiro } from "@/lib/frota/numero";
+import { faltaMigracaoDasParadas, type Parada } from "@/lib/frota/paradas";
+import { ParadasDoVeiculo, QuemEstava } from "@/components/paradas";
 import {
   Aviso,
   Badge,
@@ -55,13 +57,15 @@ const GRADE = "grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4";
 export default function VeiculosPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
+  const [paradas, setParadas] = useState<Parada[]>([]);
+  const [semMigracao, setSemMigracao] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
 
   const carregar = useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.getUser();
-    const [v, t] = await Promise.all([
+    const [v, t, p] = await Promise.all([
       supabase
         .from("veiculos")
         .select(
@@ -69,9 +73,16 @@ export default function VeiculosPage() {
         )
         .order("placa"),
       supabase.from("tecnicos").select("id, nome").eq("ativo", true).order("nome"),
+      supabase
+        .from("paradas")
+        .select("id, veiculo_id, de, ate, onde, motivo, observacao")
+        .order("de", { ascending: false }),
     ]);
     setVeiculos((v.data as Veiculo[]) ?? []);
     setTecnicos((t.data as Tecnico[]) ?? []);
+    // Enquanto a 0033 não rodar, a tela perde os períodos — não a página.
+    setParadas((p.data as Parada[]) ?? []);
+    setSemMigracao(faltaMigracaoDasParadas(p.error));
     setCarregando(false);
   }, []);
 
@@ -113,6 +124,19 @@ export default function VeiculosPage() {
         />
       )}
 
+      {semMigracao && (
+        <div className="mb-4">
+          <Aviso tom="atencao">
+            Os períodos parado com terceiro ainda não existem neste banco. Rode a migração{" "}
+            <strong>0033_parada_com_terceiro.sql</strong> no SQL Editor do Supabase.
+          </Aviso>
+        </div>
+      )}
+
+      {!carregando && !semMigracao && veiculos.length > 0 && (
+        <QuemEstava veiculos={veiculos} paradas={paradas} />
+      )}
+
       {carregando ? (
         <Cartao>
           <Carregando />
@@ -122,7 +146,14 @@ export default function VeiculosPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {veiculos.map((v) => (
-            <LinhaVeiculo key={v.id} v={v} tecnicos={tecnicos} />
+            <LinhaVeiculo
+              key={v.id}
+              v={v}
+              tecnicos={tecnicos}
+              paradas={paradas}
+              semMigracao={semMigracao}
+              onMudou={carregar}
+            />
           ))}
         </div>
       )}
@@ -130,7 +161,19 @@ export default function VeiculosPage() {
   );
 }
 
-function LinhaVeiculo({ v, tecnicos }: { v: Veiculo; tecnicos: Tecnico[] }) {
+function LinhaVeiculo({
+  v,
+  tecnicos,
+  paradas,
+  semMigracao,
+  onMudou,
+}: {
+  v: Veiculo;
+  tecnicos: Tecnico[];
+  paradas: Parada[];
+  semMigracao: boolean;
+  onMudou: () => void;
+}) {
   const [modelo, setModelo] = useState(v.modelo || "");
   const [ano, setAno] = useState(v.ano || "");
   const [resp, setResp] = useState(v.responsavel_id || "");
@@ -222,6 +265,17 @@ function LinhaVeiculo({ v, tecnicos }: { v: Veiculo; tecnicos: Tecnico[] }) {
             </span>
           )}
         </div>
+
+        {/* O botão aparece para quem chega em Veículos (gestor e PCM); a RLS de
+            `paradas` é quem decide de verdade. */}
+        {!semMigracao && (
+          <ParadasDoVeiculo
+            veiculoId={v.id}
+            paradas={paradas}
+            podeEscrever
+            onMudou={onMudou}
+          />
+        )}
       </div>
     </Cartao>
   );

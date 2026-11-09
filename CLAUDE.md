@@ -52,6 +52,10 @@ mesmo dia. Mudou lá, muda aqui.
 - **ordem de serviço**: o papel que vai com o veículo para a oficina.
 - **formulário de lavagem**: o papel que vai com o veículo para o lava-jato.
   Não é ordem de serviço: lavagem não tem peça, km de entrega nem revisão.
+- **parada**: período em que o veículo ficou com quem não é da equipe —
+  oficina, concessionária, pátio. Responde "de quem era o veículo neste dia?",
+  que é a pergunta da multa. Não confundir com o alerta PARADO, que é outra
+  coisa (rodou e parou de rodar há 7 dias); o alerta da parada é COM TERCEIRO.
 - **checklist**: vistoria semanal do veículo, feita pelo técnico — fala de
   segurança: pneu, freio, luz.
 - **limpeza**: conferência semanal de limpeza, feita pela expedição — fala de
@@ -84,6 +88,10 @@ mesmo dia. Mudou lá, muda aqui.
       digita a distância e vê quanto cada veículo custaria nela, por
       combustível ou somando a manutenção que ele realmente deu; e a correção
       do km de um roteiro pelo gestor, em `/historico`, com rastro
+- [~] Fase 12 — parada com terceiro: o período em que o veículo ficou na
+      oficina ou na concessionária, o alerta enquanto ele estiver lá, e a
+      consulta "chegou uma multa de tal dia, quem estava com o veículo?" (em
+      `/veiculos`)
 
 Detalhe do estado atual e próximos passos: `docs/handoff.md`.
 Metodologia das revisões programadas: `docs/revisoes-programadas.md`.
