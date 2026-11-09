@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Building2,
   Check,
   Eye,
   GitCompareArrows,
@@ -51,6 +52,7 @@ const ICONE: Record<string, LucideIcon> = {
   "REVISÃO": Wrench,
   ROTEIRO: Inbox,
   PARADO: ParkingCircle,
+  "COM TERCEIRO": Building2,
   "OCORRÊNCIA": ShieldAlert,
   AVARIA: GitCompareArrows,
 };
@@ -68,6 +70,10 @@ function acao(a: Alerta): { href: string; texto: string } {
     // quando?", e quem responde isso é o comparativo, já no veículo certo.
     case "AVARIA":
       return { href: "/comparativo?placa=" + a.placa, texto: "Comparar vistorias" };
+    // O alerta diz que o veículo está com outra casa. A ação é conferir o
+    // período — e é de lá que sai a resposta quando a multa chegar.
+    case "COM TERCEIRO":
+      return { href: "/veiculos", texto: "Ver o período" };
     default:
       return { href: "/historico?placa=" + a.placa, texto: "Ver histórico" };
   }
