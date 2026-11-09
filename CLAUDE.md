@@ -10,6 +10,11 @@ Next.js App Router · TypeScript · Supabase (Postgres, Auth, Storage) · Tailwi
 - Nada de cálculo derivado gravado em tabela. km_rodado, custo_km e situação
   são coluna gerada ou view. Se precisar de um número novo, é view.
 - Nome de pessoa nunca é texto livre. FK para tecnicos, sempre.
+- Migração que semeia dado escolhe o veículo pela PLACA quando o fato é de UM
+  veículo, e por `modelo ilike` só quando o fato é do MODELO (os planos de
+  manutenção, 0020–0026, onde todo Fiorino tem o mesmo intervalo). A 0033
+  errou isso e semeou a parada da ITAVEMA nas duas Scudo da frota — e "success"
+  no SQL Editor não distingue INSERT de quatro linhas de INSERT de duas.
 - Toda entrada de km é validada contra o km anterior do veículo. Na tela de
   correção (`CorrigirKm`) a validação AVISA em vez de travar: quem conserta
   dado torto costuma ter dois roteiros errados em sequência, e travar
