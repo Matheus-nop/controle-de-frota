@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   ImageOff,
   ImagePlus,
+  Flag,
   RotateCcw,
   Ruler,
   Trash2,
@@ -30,7 +31,7 @@ import {
   type FotoDaVistoria,
   type Vistoria,
 } from "@/components/vistoria";
-import { CorrigirKm, type RoteiroParaCorrigir } from "@/components/roteiro";
+import { CorrigirKm, FecharRoteiro, type RoteiroParaCorrigir } from "@/components/roteiro";
 import {
   Aviso,
   Badge,
@@ -330,6 +331,7 @@ export default function HistoricoPage() {
           data: diaDe(r.saida_em) ?? "",
           saidaEm: r.saida_em,
           tecnico: r.tecnico_saida ?? "—",
+          tecnicoSaidaId: r.tecnico_saida_id ?? null,
           kmSaida: r.km_saida ?? null,
           kmChegada: r.km_chegada ?? null,
           correcoes: correcoesDaLista(r.correcoes),
@@ -549,6 +551,7 @@ function CartaoRegistro({
   const [excluindo, setExcluindo] = useState(false);
   const [restaurando, setRestaurando] = useState(false);
   const [corrigindoKm, setCorrigindoKm] = useState(false);
+  const [fechando, setFechando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const Icone = ICONE[r.tipo];
   // O registro do histórico é mais largo do que as peças de correção precisam.
@@ -686,11 +689,32 @@ function CartaoRegistro({
           verdade — o PCM recebe o aviso em vez de um erro cru. */}
       {r.tipo === "ROTEIRO" && r.roteiro && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {/* Roteiro sem chegada é o que trava o veículo em "NA RUA" no painel.
+              Quando ele existe, fechar é a ação principal — corrigir o km é o
+              passo de antes, quando o número não fecha. */}
+          {r.roteiro.kmChegada === null && (
+            <Botao tamanho="sm" variante="primario" onClick={() => setFechando(true)}>
+              <Flag size={13} />
+              Fechar roteiro
+            </Botao>
+          )}
           <Botao tamanho="sm" onClick={() => setCorrigindoKm(true)}>
             <Ruler size={13} />
             Corrigir km
           </Botao>
         </div>
+      )}
+
+      {fechando && r.roteiro && (
+        <FecharRoteiro
+          r={r.roteiro}
+          quem={quem}
+          onFechar={() => setFechando(false)}
+          onSalvo={() => {
+            setFechando(false);
+            onMudou();
+          }}
+        />
       )}
 
       {corrigindoKm && r.roteiro && (

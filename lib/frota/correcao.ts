@@ -127,6 +127,10 @@ export function resumoDaCorrecao(c: Correcao): string {
  *  antigo. */
 export const CAMPO_KM_SAIDA = "km de saída";
 export const CAMPO_KM_CHEGADA = "km de chegada";
+/** O fechamento lançado pelo gestor no lugar do técnico. Entra no mesmo rastro:
+ *  "o veículo chegou às 14h" e "o gestor DISSE depois que chegou às 14h" não
+ *  são a mesma frase para quem ler o histórico. */
+export const CAMPO_CHEGADA = "chegada";
 
 /* --------------------------------------------------- conferência da troca */
 

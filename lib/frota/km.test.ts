@@ -132,3 +132,79 @@ test("km de saída em branco é impedimento, não um save silencioso", () => {
   assert.equal(c.impedimentos.length, 1);
   assert.match(c.impedimentos[0], /Informe o km de saída/);
 });
+
+/* ------------------------------------------------- fechar pelo gestor ---- */
+
+import { conferirFechamento } from "./km.ts";
+
+const SAIDA = "2026-11-09T12:00:00Z";
+
+test("o caso real: saiu com 21.635, voltou com 24.000 — passa, avisando", () => {
+  // 2.365 km rodados: acima do aviso de 600, abaixo do teto do banco. O técnico
+  // parou aqui porque o app pediu confirmação; o gestor confirma e fecha.
+  const c = conferirFechamento({
+    kmSaida: 21635,
+    kmChegada: 24000,
+    saidaEm: SAIDA,
+    chegadaEm: "2026-11-10T18:00:00Z",
+    vizinhos: SEM_VIZINHOS,
+  });
+  assert.deepEqual(c.impedimentos, []);
+  assert.equal(c.rodado, 2365);
+  assert.equal(c.avisos.length, 1);
+  assert.match(c.avisos[0], /fila de km alto/);
+});
+
+test("chegada antes da saída é impedimento — o banco recusa", () => {
+  const c = conferirFechamento({
+    kmSaida: 21635,
+    kmChegada: 21700,
+    saidaEm: SAIDA,
+    chegadaEm: "2026-11-08T18:00:00Z",
+    vizinhos: SEM_VIZINHOS,
+  });
+  assert.equal(c.impedimentos.length, 1);
+  assert.match(c.impedimentos[0], /não pode ser antes da saída/);
+});
+
+test("campos em branco impedem, em vez de gravar um fechamento pela metade", () => {
+  const semKm = conferirFechamento({
+    kmSaida: 21635,
+    kmChegada: null,
+    saidaEm: SAIDA,
+    chegadaEm: "2026-11-10T18:00:00Z",
+    vizinhos: SEM_VIZINHOS,
+  });
+  assert.match(semKm.impedimentos.join(" "), /Informe o km de chegada/);
+
+  const semData = conferirFechamento({
+    kmSaida: 21635,
+    kmChegada: 21700,
+    saidaEm: SAIDA,
+    chegadaEm: null,
+    vizinhos: SEM_VIZINHOS,
+  });
+  assert.match(semData.impedimentos.join(" "), /quando o veículo voltou/);
+});
+
+test("fechar herda os impedimentos da correção: acima do teto o banco recusa", () => {
+  const c = conferirFechamento({
+    kmSaida: 21635,
+    kmChegada: 21635 + KM_ABSURDO + 1,
+    saidaEm: SAIDA,
+    chegadaEm: "2026-11-10T18:00:00Z",
+    vizinhos: SEM_VIZINHOS,
+  });
+  assert.match(c.impedimentos.join(" "), /digitação/);
+});
+
+test("chegada no mesmo instante da saída passa: o limite é antes, não antes-ou-igual", () => {
+  const c = conferirFechamento({
+    kmSaida: 21635,
+    kmChegada: 21700,
+    saidaEm: SAIDA,
+    chegadaEm: SAIDA,
+    vizinhos: SEM_VIZINHOS,
+  });
+  assert.deepEqual(c.impedimentos, []);
+});
