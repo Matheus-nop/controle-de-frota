@@ -159,6 +159,43 @@ export function conferirCorrecao(p: {
   return { impedimentos, avisos, rodado };
 }
 
+/**
+ * O que não fecha ao FECHAR o roteiro pelo gestor.
+ *
+ * É a mesma conferência da correção, mais a data: `chegada_coerente` (0001) não
+ * aceita chegada antes da saída, e o gestor digita a data à mão — ele está
+ * lançando uma chegada que aconteceu dias atrás, não agora.
+ *
+ * Por que isto existe: o técnico tentou fechar, o km passou de 600 e o app
+ * pediu que ele confirmasse e dissesse para onde foi. Ele parou aí, e o veículo
+ * ficou "NA RUA" no painel. O gestor conseguia corrigir o km e não conseguia
+ * fechar — e sem uma porta aqui o jeito vira SQL na mão.
+ */
+export function conferirFechamento(p: {
+  kmSaida: number;
+  kmChegada: number | null;
+  /** A saída, em ISO. Vem do banco. */
+  saidaEm: string;
+  /** A chegada que o gestor digitou, já em ISO. Null enquanto em branco. */
+  chegadaEm: string | null;
+  vizinhos: Vizinhos;
+}): Conferencia {
+  const base = conferirCorrecao({
+    kmSaida: p.kmSaida,
+    kmChegada: p.kmChegada,
+    vizinhos: p.vizinhos,
+  });
+  const impedimentos = [...base.impedimentos];
+
+  if (p.kmChegada == null) impedimentos.push("Informe o km de chegada.");
+  if (!p.chegadaEm) impedimentos.push("Informe quando o veículo voltou.");
+  else if (Date.parse(p.chegadaEm) < Date.parse(p.saidaEm)) {
+    impedimentos.push("A chegada não pode ser antes da saída.");
+  }
+
+  return { ...base, impedimentos };
+}
+
 /** Como o km aparece na lista de correções: "2.012 km". */
 export function kmParaORastro(n: number | null): string | null {
   return n == null ? null : emKm(n);
