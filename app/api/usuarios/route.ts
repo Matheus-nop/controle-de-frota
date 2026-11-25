@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+// As regras de login moram na lib: a tela mostra o usuário sugerido antes de
+// gravar, e as duas pontas têm que dizer a mesma coisa.
+import { papelValido, paraEmail, SENHA_MINIMA, sugerirUsuario } from "@/lib/frota/usuario";
 
 // Cadastro de acesso, feito pelo app em vez de SQL na mao.
 //
@@ -13,29 +16,6 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 //   1. o cookie de sessao diz quem esta chamando, e so GESTOR passa;
 //   2. so depois disso a chave admin entra em acao.
 // A chave admin sozinha nunca autoriza nada aqui.
-
-const DOMINIO_INTERNO = "@frota.local";
-const PAPEIS = ["TECNICO", "GESTOR", "PCM", "PONTO"];
-
-// "Márcia Souza" -> "marcia.souza". Sem acento, sem espaco: e o que a pessoa
-// vai digitar no login, muitas vezes num teclado de celular.
-function sugerirUsuario(nome: string): string {
-  return nome
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s]/g, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(".");
-}
-
-function paraEmail(usuario: string): string {
-  const v = usuario.trim().toLowerCase();
-  return v.includes("@") ? v : v.replace(/\s+/g, "") + DOMINIO_INTERNO;
-}
 
 function erro(mensagem: string, status = 400) {
   return NextResponse.json({ erro: mensagem }, { status });
@@ -96,8 +76,9 @@ export async function POST(request: Request) {
 
   if (!tecnicoId && !nome) return erro("Informe o nome da pessoa.");
   if (!usuario) return erro("Informe o usuário de login.");
-  if (senha.length < 8) return erro("A senha precisa de pelo menos 8 caracteres.");
-  if (!PAPEIS.includes(papel)) return erro("Papel inválido.");
+  if (senha.length < SENHA_MINIMA)
+    return erro(`A senha precisa de pelo menos ${SENHA_MINIMA} caracteres.`);
+  if (!papelValido(papel)) return erro("Papel inválido.");
 
   const email = paraEmail(usuario);
 
@@ -165,7 +146,7 @@ export async function PATCH(request: Request) {
   // papel e ativo passam pela RLS normal: é o gestor escrevendo como ele mesmo
   const campos: Record<string, unknown> = {};
   if (corpo.papel !== undefined) {
-    if (!PAPEIS.includes(String(corpo.papel))) return erro("Papel inválido.");
+    if (!papelValido(String(corpo.papel))) return erro("Papel inválido.");
     campos.papel = corpo.papel;
   }
   if (corpo.ativo !== undefined) campos.ativo = !!corpo.ativo;
@@ -210,8 +191,8 @@ export async function PATCH(request: Request) {
       });
     }
 
-    if (trocaSenha && String(corpo.senha).length < 8) {
-      return erro("A senha precisa de pelo menos 8 caracteres.");
+    if (trocaSenha && String(corpo.senha).length < SENHA_MINIMA) {
+      return erro(`A senha precisa de pelo menos ${SENHA_MINIMA} caracteres.`);
     }
 
     const alteracao: { password?: string; ban_duration?: string } = {};
