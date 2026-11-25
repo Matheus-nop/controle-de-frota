@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  chutarNome,
+  PAPEIS,
+  paraEmail,
+  SENHA_MINIMA,
+  senhaSugerida,
+  soUsuario,
+  sugerirUsuario,
+} from "@/lib/frota/usuario";
+import {
   Aviso,
   Badge,
   Botao,
@@ -42,12 +51,6 @@ type Pessoa = {
 };
 type Login = { user_id: string; email: string; criado_em: string };
 
-const PAPEIS = [
-  { valor: "TECNICO", rotulo: "Técnico", ajuda: "Lança roteiro, checklist e ocorrência. Vê só o que é dele." },
-  { valor: "GESTOR", rotulo: "Gestor", ajuda: "Painel completo, veículos, ocorrências e cadastro de acesso." },
-  { valor: "PCM", rotulo: "PCM", ajuda: "Manutenção, checklists, alertas e cadastro de veículo. Não lança roteiro nem mexe em quem entra no app." },
-  { valor: "PONTO", rotulo: "Ponto", ajuda: "Só lê o horário dos roteiros, em /ponto. Não escreve em nada." },
-];
 
 const TOM_PAPEL: Record<string, Tom> = {
   GESTOR: "info",
@@ -62,20 +65,6 @@ const FAIXA_PAPEL: Record<string, string> = {
   TECNICO: "border-l-slate-300",
 };
 
-// "marcia.souza@frota.local" -> "marcia.souza". É o que a pessoa digita.
-function soUsuario(email: string) {
-  return email.replace(/@frota\.local$/i, "");
-}
-
-// "marcia.souza" -> "Marcia Souza". Chute de nome para o gestor corrigir, não
-// para gravar às cegas: o nome é o que aparece em todo roteiro dela.
-function chutarNome(email: string) {
-  return soUsuario(email)
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join(" ");
-}
 
 export default function UsuariosPage() {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
@@ -123,9 +112,17 @@ export default function UsuariosPage() {
   return (
     <Pagina
       titulo="Quem entra no app"
-      subtitulo="O login nasce no Supabase; o nome e o papel nascem aqui."
+      subtitulo={
+        adminDisponivel
+          ? "Cadastre a pessoa e o login de uma vez. Papel, senha e desligamento também saem daqui."
+          : "O login nasce no Supabase; o nome e o papel nascem aqui."
+      }
     >
-      <ComoCriar adminDisponivel={adminDisponivel} />
+      {adminDisponivel ? (
+        <CadastrarPessoa semLogin={semLogin} onCriado={carregar} />
+      ) : (
+        <ComoCriar />
+      )}
 
       <h2 className="mb-2.5 mt-6 flex items-center gap-2 text-[15px] font-semibold text-slate-900">
         Logins aguardando cadastro
@@ -176,8 +173,192 @@ export default function UsuariosPage() {
   );
 }
 
+/* ------------------------- cadastrar pessoa e login ----------------------- */
+/**
+ * O cadastro inteiro numa tela: nome, usuário, senha e papel.
+ *
+ * A rota POST /api/usuarios já sabia fazer isso desde que nasceu — o que nunca
+ * existiu foi o formulário. O gestor ia ao painel do Supabase criar o login,
+ * voltava aqui para dar nome e papel, e repetia isso pessoa por pessoa. Para
+ * cadastrar cinco, eram dez idas e vindas.
+ *
+ * Depois de gravar, o formulário continua aberto e mostra o que foi criado:
+ * quem cadastra uma pessoa quase sempre vai cadastrar a próxima, e o usuário e
+ * a senha precisam ficar à vista para serem passados adiante.
+ */
+function CadastrarPessoa({
+  semLogin,
+  onCriado,
+}: {
+  semLogin: Pessoa[];
+  onCriado: () => void;
+}) {
+  const [tecnicoId, setTecnicoId] = useState(""); // "" = pessoa nova
+  const [nome, setNome] = useState("");
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha] = useState("");
+  const [papel, setPapel] = useState("TECNICO");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [feitos, setFeitos] = useState<{ nome: string; usuario: string; senha: string }[]>([]);
+
+  const existente = semLogin.find((p) => p.id === tecnicoId) ?? null;
+  const nomeEfetivo = existente ? existente.nome : nome;
+  // O usuário em branco segue o nome; digitado, manda. É a mesma regra do
+  // servidor (`sugerirUsuario`), importada e não copiada.
+  const usuarioEfetivo = usuario.trim() || sugerirUsuario(nomeEfetivo);
+  const ajuda = PAPEIS.find((x) => x.valor === papel)?.ajuda;
+
+  const falta =
+    !nomeEfetivo.trim() || !usuarioEfetivo || senha.length < SENHA_MINIMA || salvando;
+
+  async function criar() {
+    setErro(null);
+    setSalvando(true);
+    const r = await fetch("/api/usuarios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nome: nomeEfetivo.trim(),
+        usuario: usuarioEfetivo,
+        senha,
+        papel,
+        tecnicoId: tecnicoId || null,
+      }),
+    });
+    const corpo = await r.json().catch(() => ({}));
+    setSalvando(false);
+    if (!r.ok) {
+      setErro(corpo.erro ?? "Não deu para cadastrar.");
+      return;
+    }
+    // Fica na tela: a senha é o que o gestor vai passar para a pessoa, e some
+    // do servidor assim que é gravada.
+    setFeitos((f) => [...f, { nome: corpo.nome ?? nomeEfetivo, usuario: corpo.usuario, senha }]);
+    setTecnicoId("");
+    setNome("");
+    setUsuario("");
+    setSenha("");
+    setPapel("TECNICO");
+    onCriado();
+  }
+
+  return (
+    <Cartao titulo="Cadastrar pessoa" className="ring-brand-300">
+      <div className="p-4">
+        <p className="mb-3 text-[12.5px] leading-relaxed text-slate-600">
+          Cria o login e a pessoa de uma vez. Ela entra no app digitando só o{" "}
+          <b>usuário</b> — sem o <code>@frota.local</code>.
+        </p>
+
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3">
+          {semLogin.length > 0 && (
+            <Campo
+              rotulo="Quem é"
+              dica="Quem já está no cadastro tem que ser escolhido aqui — criar de novo faria a mesma pessoa aparecer duas vezes nos roteiros."
+            >
+              <Select value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
+                <option value="">Pessoa nova</option>
+                <optgroup label="Já cadastrado, ainda sem login">
+                  {semLogin.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
+                    </option>
+                  ))}
+                </optgroup>
+              </Select>
+            </Campo>
+          )}
+
+          {!existente && (
+            <Campo rotulo="Nome completo" dica="É o nome que vai em todo roteiro dela.">
+              <Input
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                placeholder="ex.: Márcia Souza"
+              />
+            </Campo>
+          )}
+
+          <Campo
+            rotulo="Usuário"
+            dica={usuarioEfetivo ? `Vai entrar como ${paraEmail(usuarioEfetivo)}` : "Sai do nome."}
+          >
+            <Input
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
+              placeholder={sugerirUsuario(nomeEfetivo) || "marcia.souza"}
+            />
+          </Campo>
+
+          <Campo rotulo="Senha" dica={`Mínimo ${SENHA_MINIMA} caracteres. Passe para a pessoa.`}>
+            <div className="flex gap-2">
+              <Input
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                placeholder="mínimo 8"
+              />
+              <Botao className="shrink-0" onClick={() => setSenha(senhaSugerida())}>
+                Sugerir
+              </Botao>
+            </div>
+          </Campo>
+
+          <Campo rotulo="Papel" dica={ajuda}>
+            <Select value={papel} onChange={(e) => setPapel(e.target.value)}>
+              {PAPEIS.map((x) => (
+                <option key={x.valor} value={x.valor}>
+                  {x.rotulo}
+                </option>
+              ))}
+            </Select>
+          </Campo>
+        </div>
+
+        {erro && (
+          <div className="mt-2.5">
+            <Aviso>{erro}</Aviso>
+          </div>
+        )}
+
+        <Botao variante="primario" className="mt-3.5" onClick={criar} disabled={falta}>
+          {salvando ? "Cadastrando…" : "Cadastrar e criar login"}
+        </Botao>
+
+        {feitos.length > 0 && (
+          <div className="mt-3.5 rounded-lg bg-emerald-50 p-3.5 ring-1 ring-inset ring-emerald-200">
+            <div className="text-[13px] font-semibold text-emerald-800">
+              {feitos.length === 1 ? "1 pessoa cadastrada" : `${feitos.length} pessoas cadastradas`}{" "}
+              · anote antes de sair desta tela
+            </div>
+            <p className="mb-2 mt-1 text-[12px] leading-relaxed text-emerald-800">
+              A senha não fica guardada em lugar nenhum que dê para consultar depois. Se perder,
+              o caminho é trocar por outra, ali embaixo em Gerenciar.
+            </p>
+            <table className="w-full text-[12.5px]">
+              <tbody>
+                {feitos.map((f) => (
+                  <tr key={f.usuario} className="border-t border-emerald-200/70">
+                    <td className="py-1.5 pr-3 text-emerald-900">{f.nome}</td>
+                    <td className="py-1.5 pr-3 font-mono font-semibold text-emerald-900">
+                      {f.usuario}
+                    </td>
+                    <td className="py-1.5 font-mono text-emerald-900">{f.senha}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Cartao>
+  );
+}
+
 /* --------------------------- o passo no Supabase -------------------------- */
-function ComoCriar({ adminDisponivel }: { adminDisponivel: boolean }) {
+/** O caminho de quando a chave admin não está no ambiente: o login nasce no
+ *  painel do Supabase e volta para cá para ganhar nome e papel. */
+function ComoCriar() {
   const [aberto, setAberto] = useState(false);
   return (
     <Cartao className="bg-slate-50 p-4">
@@ -213,13 +394,16 @@ function ComoCriar({ adminDisponivel }: { adminDisponivel: boolean }) {
         </ol>
       )}
 
-      {aberto && !adminDisponivel && (
-        <p className="mt-3 text-[12px] leading-relaxed text-slate-400">
-          Dá para criar o login direto por esta tela também, mas isso exige a chave{" "}
-          <code>SUPABASE_SERVICE_ROLE_KEY</code> no ambiente do app (Vercel → Settings → Environment
-          Variables). Enquanto ela não existir, o caminho é o de cima — e ele funciona igual.
-        </p>
-      )}
+      {/* Fora do "Como faz", e não em cinza miúdo lá dentro: este aviso é o
+          que separa "o jeito do app é esse mesmo" de "falta uma variável". A
+          primeira leitura custou uma volta ao Supabase por pessoa. */}
+      <div className="mt-3 rounded-lg bg-white p-3 text-[12.5px] leading-relaxed text-slate-600 ring-1 ring-inset ring-slate-200">
+        <strong className="text-slate-900">Dá para fazer tudo por aqui.</strong> Para o formulário
+        de cadastro aparecer nesta tela — nome, usuário, senha e papel de uma vez —, falta a chave{" "}
+        <code>SUPABASE_SERVICE_ROLE_KEY</code> no ambiente do app: Vercel → Settings → Environment
+        Variables, com o valor de Supabase → Project Settings → API → <b>service_role</b>. Depois de
+        salvar, publique de novo e recarregue esta página.
+      </div>
     </Cartao>
   );
 }
